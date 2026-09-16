@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, extractAvatar } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
 import { Modal } from '../components/common/Modal';
@@ -75,14 +75,16 @@ export function Profile() {
     }
   }, [isMobile]);
 
+  const [imgError, setImgError] = useState(false);
   const displayName = user?.name || user?.user_metadata?.name || 'Mannam Ganesh babu';
   const userEmail = user?.email || 'kit27.ad303@gmail.com';
   const initial = displayName.charAt(0).toUpperCase();
-  const avatarUrl =
-    user?.avatar_url ||
-    user?.user_metadata?.avatar_url ||
-    (user?.id ? localStorage.getItem(`ideavault_avatar_${user.id}`) : null) ||
-    localStorage.getItem('ideavault_avatar_global');
+  const avatarUrl = extractAvatar(user);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [avatarUrl]);
+
   const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   // Dynamic color palette supporting both Light and Dark modes seamlessly
@@ -527,10 +529,11 @@ export function Profile() {
               >
                 {uploadingAvatar ? (
                   <div style={{ fontSize: '1rem', color: '#121418', fontWeight: 600 }}>...</div>
-                ) : avatarUrl ? (
+                ) : avatarUrl && !imgError ? (
                   <img
                     src={avatarUrl}
                     alt={displayName}
+                    onError={() => setImgError(true)}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
                 ) : (
@@ -968,8 +971,13 @@ export function Profile() {
                   flexShrink: 0,
                 }}
               >
-                {avatarUrl ? (
-                  <img src={avatarUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                {avatarUrl && !imgError ? (
+                  <img
+                    src={avatarUrl}
+                    alt="Avatar"
+                    onError={() => setImgError(true)}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
                 ) : (
                   initial
                 )}
@@ -1260,8 +1268,13 @@ export function Profile() {
             >
               {uploadingAvatar ? (
                 <div style={{ fontSize: '1rem', color: '#121418', fontWeight: 600 }}>...</div>
-              ) : avatarUrl ? (
-                <img src={avatarUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : avatarUrl && !imgError ? (
+                <img
+                  src={avatarUrl}
+                  alt="Avatar"
+                  onError={() => setImgError(true)}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
               ) : (
                 initial
               )}
