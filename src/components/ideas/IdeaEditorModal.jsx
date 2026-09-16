@@ -78,6 +78,7 @@ export function IdeaEditorModal({
       onClose={onClose}
       title={idea ? 'Edit Idea' : 'New Idea'}
       maxWidth="680px"
+      drawerMobile={true}
     >
       <form onSubmit={handleSubmit}>
         {/* Title & Favorite Toggle */}
