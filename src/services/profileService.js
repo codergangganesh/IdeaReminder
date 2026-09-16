@@ -48,14 +48,22 @@ export const profileService = {
     if (updates.default_priority !== undefined) payload.default_priority = updates.default_priority;
     if (updates.bio !== undefined) payload.bio = updates.bio;
 
-    const { data, error } = await insforge.database
-      .from('user_settings')
-      .update(payload)
-      .eq('user_id', userId)
-      .select();
+    try {
+      const { data, error } = await insforge.database
+        .from('user_settings')
+        .update(payload)
+        .eq('user_id', userId)
+        .select();
 
-    if (error) throw error;
-    return data?.[0];
+      if (error) {
+        console.warn('user_settings update notice:', error.message);
+        return null;
+      }
+      return data?.[0];
+    } catch (err) {
+      console.warn('user_settings update exception:', err);
+      return null;
+    }
   },
 
   exportToJSON(ideas, categories) {

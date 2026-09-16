@@ -61,8 +61,9 @@ export function Login() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState(false);
 
-  const { signIn } = useAuth();
+  const { signIn, signInWithOAuth } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
 
@@ -110,8 +111,18 @@ export function Login() {
     }, 5000);
   };
 
-  const handleSocialClick = (provider) => {
-    showToast(`Connecting with ${provider}... Please sign in with your email or password.`, 'info');
+  const handleSocialClick = async (provider) => {
+    setOauthLoading(true);
+    setError(null);
+    try {
+      showToast(`Redirecting to ${provider} sign in...`, 'info');
+      await signInWithOAuth(provider.toLowerCase());
+    } catch (err) {
+      console.error(`${provider} OAuth error:`, err);
+      setError(err.message || `Failed to sign in with ${provider}. Please verify OAuth configuration in InsForge.`);
+      showToast(err.message || `Failed to connect with ${provider}`, 'error');
+      setOauthLoading(false);
+    }
   };
 
   /* =========================================================================
@@ -297,8 +308,72 @@ export function Login() {
                 )}
               </button>
 
+              {/* Divider: or */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  margin: '0.75rem 0 0.55rem 0',
+                }}
+              >
+                <div style={{ flex: 1, height: '1px', backgroundColor: '#E5E7EB' }} />
+                <span style={{ padding: '0 0.65rem', fontSize: '0.76rem', color: '#9CA3AF' }}>or</span>
+                <div style={{ flex: 1, height: '1px', backgroundColor: '#E5E7EB' }} />
+              </div>
+
+              {/* Social Login Buttons: Google & GitHub */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.55rem' }}>
+                <button
+                  type="button"
+                  disabled={oauthLoading || loading}
+                  onClick={() => handleSocialClick('Google')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.4rem',
+                    padding: '0.62rem 0.5rem',
+                    borderRadius: '9999px',
+                    border: '1px solid #E5E7EB',
+                    backgroundColor: '#FFFFFF',
+                    color: '#374151',
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    cursor: oauthLoading ? 'wait' : 'pointer',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+                  }}
+                >
+                  <GoogleIcon size={16} />
+                  <span>Google</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={oauthLoading || loading}
+                  onClick={() => handleSocialClick('GitHub')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.4rem',
+                    padding: '0.62rem 0.5rem',
+                    borderRadius: '9999px',
+                    border: '1px solid #E5E7EB',
+                    backgroundColor: '#FFFFFF',
+                    color: '#374151',
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    cursor: oauthLoading ? 'wait' : 'pointer',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+                  }}
+                >
+                  <GitHubIcon size={16} />
+                  <span>GitHub</span>
+                </button>
+              </div>
+
               {/* Footer Link: Create New Account */}
-              <div className="auth-footer-link-wrap">
+              <div className="auth-footer-link-wrap" style={{ marginTop: '0.85rem' }}>
                 <Link to="/register" className="auth-footer-link">
                   Create New Account
                 </Link>
@@ -971,6 +1046,7 @@ export function Login() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                 <button
                   type="button"
+                  disabled={oauthLoading || loading}
                   onClick={() => handleSocialClick('Google')}
                   style={{
                     display: 'flex',
@@ -984,7 +1060,7 @@ export function Login() {
                     color: '#374151',
                     fontSize: '0.78rem',
                     fontWeight: 600,
-                    cursor: 'pointer',
+                    cursor: oauthLoading ? 'wait' : 'pointer',
                     boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
                     transition: 'all 0.15s ease',
                   }}
@@ -1003,6 +1079,7 @@ export function Login() {
 
                 <button
                   type="button"
+                  disabled={oauthLoading || loading}
                   onClick={() => handleSocialClick('GitHub')}
                   style={{
                     display: 'flex',
@@ -1016,7 +1093,7 @@ export function Login() {
                     color: '#374151',
                     fontSize: '0.78rem',
                     fontWeight: 600,
-                    cursor: 'pointer',
+                    cursor: oauthLoading ? 'wait' : 'pointer',
                     boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
                     transition: 'all 0.15s ease',
                   }}

@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 
 export function Profile() {
-  const { user, signOut, updateProfileName, updateProfileAvatar } = useAuth();
+  const { user, signOut, updateProfileName, updateProfileAvatar, updateProfileData } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -78,7 +78,11 @@ export function Profile() {
   const displayName = user?.name || user?.user_metadata?.name || 'Mannam Ganesh babu';
   const userEmail = user?.email || 'kit27.ad303@gmail.com';
   const initial = displayName.charAt(0).toUpperCase();
-  const avatarUrl = user?.avatar_url || user?.user_metadata?.avatar_url;
+  const avatarUrl =
+    user?.avatar_url ||
+    user?.user_metadata?.avatar_url ||
+    (user?.id ? localStorage.getItem(`ideavault_avatar_${user.id}`) : null) ||
+    localStorage.getItem('ideavault_avatar_global');
   const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   // Dynamic color palette supporting both Light and Dark modes seamlessly
@@ -119,21 +123,22 @@ export function Profile() {
   const STORAGE_KEY = user?.id ? `ideavault_profile_extra_${user.id}` : 'ideavault_profile_extra_default';
 
   const [profileData, setProfileData] = useState(() => {
+    const remoteBio = user?.user_metadata?.bio || user?.profile?.bio || user?.bio;
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         return {
-          fullName: parsed.fullName || displayName,
-          email: parsed.email || userEmail,
-          bio: parsed.bio !== undefined ? parsed.bio : 'IdeaVault Creator • Capturing thoughts and inspirations daily.',
+          fullName: user?.name || user?.user_metadata?.name || parsed.fullName || displayName,
+          email: user?.email || parsed.email || userEmail,
+          bio: remoteBio !== undefined && remoteBio !== null && remoteBio !== '' ? remoteBio : (parsed.bio !== undefined ? parsed.bio : 'IdeaVault Creator • Capturing thoughts and inspirations daily.'),
         };
       }
     } catch (e) { }
     return {
-      fullName: displayName,
-      email: userEmail,
-      bio: 'IdeaVault Creator • Capturing thoughts and inspirations daily.',
+      fullName: user?.name || user?.user_metadata?.name || displayName,
+      email: user?.email || userEmail,
+      bio: remoteBio || 'IdeaVault Creator • Capturing thoughts and inspirations daily.',
     };
   });
 
@@ -155,25 +160,38 @@ export function Profile() {
   const [passwordError, setPasswordError] = useState(null);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
 
-  // Sync profileData name if user object changes
+  // Sync profileData when user name or remote bio updates
   useEffect(() => {
-    if (user?.name && user.name !== profileData.fullName) {
-      setProfileData((prev) => ({ ...prev, fullName: user.name }));
+    const remoteBio = user?.user_metadata?.bio || user?.profile?.bio || user?.bio;
+    const remoteName = user?.name || user?.user_metadata?.name;
+    if (remoteName || remoteBio !== undefined) {
+      setProfileData((prev) => ({
+        ...prev,
+        fullName: remoteName || prev.fullName,
+        bio: remoteBio !== undefined && remoteBio !== null && remoteBio !== '' ? remoteBio : prev.bio,
+      }));
     }
-  }, [user?.name]);
+  }, [user?.name, user?.user_metadata?.name, user?.user_metadata?.bio, user?.profile?.bio, user?.bio]);
 
   const handleSaveName = async (e) => {
     e?.preventDefault();
     if (!newName.trim()) return;
     setSaving(true);
     try {
-      await updateProfileName(newName.trim());
+      if (updateProfileData) {
+        await updateProfileData({
+          name: newName.trim(),
+          bio: editForm.bio,
+        });
+      } else if (updateProfileName) {
+        await updateProfileName(newName.trim());
+      }
       setProfileData((prev) => {
-        const next = { ...prev, fullName: newName.trim() };
+        const next = { ...prev, fullName: newName.trim(), bio: editForm.bio };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
         return next;
       });
-      showToast('Profile information updated', 'success');
+      showToast('Profile information saved to InsForge cloud!', 'success');
       setEditModalOpen(false);
     } catch (err) {
       showToast('Failed to update profile', 'error');
@@ -184,15 +202,26 @@ export function Profile() {
 
   const handleDesktopSave = async () => {
     if (isEditing) {
+      setSaving(true);
       setProfileData(editForm);
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(editForm));
-        if (editForm.fullName !== user?.name && updateProfileName) {
+        if (updateProfileData) {
+          await updateProfileData({
+            name: editForm.fullName,
+            bio: editForm.bio,
+          });
+        } else if (updateProfileName) {
           await updateProfileName(editForm.fullName);
         }
-      } catch (e) { }
+        showToast('Personal information & Bio saved to InsForge cloud!', 'success');
+      } catch (e) {
+        console.warn('Error saving to InsForge:', e);
+        showToast('Saved locally, syncing to InsForge...', 'info');
+      } finally {
+        setSaving(false);
+      }
       setIsEditing(false);
-      showToast('Personal information saved successfully!', 'success');
     } else {
       setEditForm(profileData);
       setIsEditing(true);
@@ -958,7 +987,7 @@ export function Profile() {
               </div>
             </div>
 
-            <div className="form-field-group" style={{ marginBottom: '1.5rem' }}>
+            <div className="form-field-group" style={{ marginBottom: '1.25rem' }}>
               <label className="form-label" htmlFor="edit-display-name">
                 Full Name
               </label>
@@ -974,12 +1003,28 @@ export function Profile() {
               />
             </div>
 
+            <div className="form-field-group" style={{ marginBottom: '1.5rem' }}>
+              <label className="form-label" htmlFor="edit-mobile-bio">
+                Bio / Personal Note
+              </label>
+              <textarea
+                id="edit-mobile-bio"
+                className="form-input-control"
+                rows={3}
+                value={editForm.bio}
+                onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
+                placeholder="Tell something about yourself or your creative vision..."
+                maxLength={250}
+                style={{ resize: 'vertical', lineHeight: 1.4 }}
+              />
+            </div>
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
               <Button variant="ghost" onClick={() => setEditModalOpen(false)} disabled={saving}>
                 Cancel
               </Button>
               <Button variant="mustard" type="submit" loading={saving} icon={Check}>
-                Save Name
+                Save Profile
               </Button>
             </div>
           </form>

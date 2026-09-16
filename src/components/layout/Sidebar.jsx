@@ -23,6 +23,11 @@ export function Sidebar({ ideasCount = 0, favoritesCount = 0, onQuickCapture }) 
 
   const displayName = user?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'My Vault';
   const initial = displayName.charAt(0).toUpperCase();
+  const avatarUrl =
+    user?.avatar_url ||
+    user?.user_metadata?.avatar_url ||
+    (user?.id ? localStorage.getItem(`ideavault_avatar_${user.id}`) : null) ||
+    localStorage.getItem('ideavault_avatar_global');
 
   return (
     <aside className="app-sidebar">
@@ -91,7 +96,17 @@ export function Sidebar({ ideasCount = 0, favoritesCount = 0, onQuickCapture }) 
       {/* User Footer */}
       <div className="sidebar-user-footer">
         <div className="sidebar-user-card" onClick={() => navigate('/profile')}>
-          <div className="user-avatar-circle">{initial}</div>
+          <div className="user-avatar-circle" style={{ overflow: 'hidden' }}>
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={displayName}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+              />
+            ) : (
+              initial
+            )}
+          </div>
           <div className="user-meta-info">
             <div className="user-display-name">{displayName}</div>
             <div className="user-email-text">{user?.email}</div>

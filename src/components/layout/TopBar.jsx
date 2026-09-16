@@ -27,7 +27,11 @@ export function TopBar() {
 
   const displayName = user?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
   const initial = displayName.charAt(0).toUpperCase();
-  const avatarUrl = user?.avatar_url || user?.user_metadata?.avatar_url;
+  const avatarUrl =
+    user?.avatar_url ||
+    user?.user_metadata?.avatar_url ||
+    (user?.id ? localStorage.getItem(`ideavault_avatar_${user.id}`) : null) ||
+    localStorage.getItem('ideavault_avatar_global');
 
   // Close dropdown on click outside or escape key
   useEffect(() => {
