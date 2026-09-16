@@ -449,12 +449,16 @@ export function AuthProvider({ children }) {
     }
   }, [user]);
 
-  const signInWithOAuth = useCallback(async (provider = 'github') => {
+  const signInWithOAuth = useCallback(async (provider = 'google', options = {}) => {
     try {
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const { data, error } = await insforge.auth.signInWithOAuth(provider.toLowerCase(), {
+      const normalizedProvider = provider.toLowerCase();
+      const oauthParams = {
         redirectTo: `${origin}/`,
-      });
+        ...(normalizedProvider === 'google' ? { additionalParams: { prompt: 'select_account' } } : {}),
+        ...options,
+      };
+      const { data, error } = await insforge.auth.signInWithOAuth(normalizedProvider, oauthParams);
       if (error) throw error;
       return data;
     } catch (err) {
