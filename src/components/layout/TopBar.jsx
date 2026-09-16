@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth, extractAvatar } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useToast } from '../../context/ToastContext';
 import {
@@ -21,17 +21,18 @@ export function TopBar() {
   const location = useLocation();
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const menuRef = useRef(null);
 
   const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   const displayName = user?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
   const initial = displayName.charAt(0).toUpperCase();
-  const avatarUrl =
-    user?.avatar_url ||
-    user?.user_metadata?.avatar_url ||
-    (user?.id ? localStorage.getItem(`ideavault_avatar_${user.id}`) : null) ||
-    localStorage.getItem('ideavault_avatar_global');
+  const avatarUrl = extractAvatar(user);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [avatarUrl]);
 
   // Close dropdown on click outside or escape key
   useEffect(() => {
@@ -127,10 +128,11 @@ export function TopBar() {
           aria-label="User account menu"
           aria-expanded={menuOpen}
         >
-          {avatarUrl ? (
+          {avatarUrl && !imgError ? (
             <img
               src={avatarUrl}
               alt={displayName}
+              onError={() => setImgError(true)}
               style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
             />
           ) : (
@@ -184,8 +186,13 @@ export function TopBar() {
                   flexShrink: 0,
                 }}
               >
-                {avatarUrl ? (
-                  <img src={avatarUrl} alt={displayName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                {avatarUrl && !imgError ? (
+                  <img
+                    src={avatarUrl}
+                    alt={displayName}
+                    onError={() => setImgError(true)}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
                 ) : (
                   initial
                 )}

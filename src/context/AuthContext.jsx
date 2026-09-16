@@ -5,21 +5,38 @@ import { profileService } from '../services/profileService';
 
 const SESSION_STORAGE_KEY = 'ideavault_auth_session';
 
+export function extractAvatar(userObj) {
+  if (!userObj) return null;
+  return (
+    userObj.avatar_url ||
+    userObj.user_metadata?.avatar_url ||
+    userObj.user_metadata?.picture ||
+    userObj.user_metadata?.avatar ||
+    userObj.picture ||
+    userObj.profile?.avatar_url ||
+    userObj.profile?.picture ||
+    (userObj.id ? localStorage.getItem(`ideavault_avatar_${userObj.id}`) : null) ||
+    localStorage.getItem('ideavault_avatar_global') ||
+    null
+  );
+}
+
 function getLocalSession() {
   if (typeof window === 'undefined') return null;
   try {
     const raw = localStorage.getItem(SESSION_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (parsed && parsed.accessToken && parsed.user) {
-      const savedAvatar =
-        localStorage.getItem(`ideavault_avatar_${parsed.user.id}`) ||
-        localStorage.getItem('ideavault_avatar_global') ||
-        parsed.user.avatar_url ||
-        parsed.user.user_metadata?.avatar_url;
+    if (parsed && (parsed.accessToken || parsed.user)) {
+      const savedAvatar = extractAvatar(parsed.user);
 
       if (savedAvatar) {
         parsed.user.avatar_url = savedAvatar;
+        parsed.user.user_metadata = {
+          ...(parsed.user.user_metadata || {}),
+          avatar_url: savedAvatar,
+          picture: savedAvatar,
+        };
       }
 
       // Check for saved profile extra metadata (bio, custom fields)
@@ -38,9 +55,6 @@ function getLocalSession() {
         }
       } catch (e) {}
 
-      if (savedAvatar) {
-        parsed.user.user_metadata = { ...(parsed.user.user_metadata || {}), avatar_url: savedAvatar };
-      }
       return parsed;
     }
   } catch (e) {
@@ -50,19 +64,16 @@ function getLocalSession() {
 }
 
 function saveLocalSession(sessionData) {
-  if (typeof window === 'undefined' || !sessionData) return;
+  if (typeof window === 'undefined' || !sessionData || !sessionData.user) return;
   try {
-    const avatarUrl =
-      sessionData.user?.avatar_url ||
-      sessionData.user?.user_metadata?.avatar_url ||
-      (sessionData.user?.id ? localStorage.getItem(`ideavault_avatar_${sessionData.user.id}`) : null) ||
-      localStorage.getItem('ideavault_avatar_global');
+    const avatarUrl = extractAvatar(sessionData.user);
 
     if (avatarUrl && sessionData.user) {
       sessionData.user.avatar_url = avatarUrl;
       sessionData.user.user_metadata = {
         ...(sessionData.user.user_metadata || {}),
         avatar_url: avatarUrl,
+        picture: avatarUrl,
       };
       if (sessionData.user.id) {
         try {
@@ -74,9 +85,19 @@ function saveLocalSession(sessionData) {
       } catch (e) {}
     }
 
+    const currentToken =
+      sessionData.accessToken ||
+      insforge.tokenManager?.getSession?.()?.accessToken ||
+      null;
+
+    const currentRefreshToken =
+      sessionData.refreshToken ||
+      insforge.tokenManager?.getSession?.()?.refreshToken ||
+      null;
+
     const toSave = {
-      accessToken: sessionData.accessToken,
-      refreshToken: sessionData.refreshToken || null,
+      accessToken: currentToken,
+      refreshToken: currentRefreshToken,
       user: sessionData.user,
       savedAt: Date.now(),
     };
@@ -135,15 +156,18 @@ export function AuthProvider({ children }) {
           if (cancelled) return;
 
           if (!error && data?.user) {
-            const savedAvatar =
-              localStorage.getItem(`ideavault_avatar_${data.user.id}`) ||
-              localStorage.getItem('ideavault_avatar_global') ||
-              saved.user?.avatar_url ||
-              data.user.avatar_url ||
-              data.user.user_metadata?.avatar_url;
+            const savedAvatar = extractAvatar(data.user) || extractAvatar(saved.user);
 
             if (savedAvatar) {
               data.user.avatar_url = savedAvatar;
+              if (data.user.id) {
+                try {
+                  localStorage.setItem(`ideavault_avatar_${data.user.id}`, savedAvatar);
+                } catch (e) {}
+              }
+              try {
+                localStorage.setItem('ideavault_avatar_global', savedAvatar);
+              } catch (e) {}
             }
 
             // Sync bio and profile fields from InsForge auth profile/metadata and user_settings
@@ -171,6 +195,7 @@ export function AuthProvider({ children }) {
               ...(data.user.profile || {}),
               bio: resolvedBio,
               avatar_url: savedAvatar || data.user.avatar_url,
+              picture: savedAvatar || data.user.avatar_url,
             };
 
             setUser(data.user);
@@ -218,19 +243,23 @@ export function AuthProvider({ children }) {
           }
         }
       } else {
-        // No local session, attempt normal hydration
+        // No local session, attempt normal hydration (e.g. cold load or OAuth callback)
         try {
           const { data, error } = await insforge.auth.getCurrentUser();
           if (cancelled) return;
           if (!error && data?.user) {
-            const savedAvatar =
-              localStorage.getItem(`ideavault_avatar_${data.user.id}`) ||
-              localStorage.getItem('ideavault_avatar_global') ||
-              data.user.avatar_url ||
-              data.user.user_metadata?.avatar_url;
+            const savedAvatar = extractAvatar(data.user);
 
             if (savedAvatar) {
               data.user.avatar_url = savedAvatar;
+              if (data.user.id) {
+                try {
+                  localStorage.setItem(`ideavault_avatar_${data.user.id}`, savedAvatar);
+                } catch (e) {}
+              }
+              try {
+                localStorage.setItem('ideavault_avatar_global', savedAvatar);
+              } catch (e) {}
             }
 
             let remoteBio = data.user.user_metadata?.bio || data.user.profile?.bio || data.user.bio;
@@ -257,9 +286,13 @@ export function AuthProvider({ children }) {
               ...(data.user.profile || {}),
               bio: resolvedBio,
               avatar_url: savedAvatar || data.user.avatar_url,
+              picture: savedAvatar || data.user.avatar_url,
             };
 
             setUser(data.user);
+            saveLocalSession({
+              user: data.user,
+            });
             categoryService.seedDefaultCategories(data.user.id).catch(console.warn);
           } else {
             setUser(null);
