@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
 import { VoiceRecorder } from '../voice/VoiceRecorder';
 import { useVoiceRecognition } from '../../hooks/useVoiceRecognition';
 import { generateSmartTitle, suggestCategory, extractSuggestedTags } from '../../services/smartSuggestions';
-import { Sparkles, Check, Tag, ChevronDown, Flag, AlertCircle } from 'lucide-react';
+import { Sparkles, Check, Tag } from 'lucide-react';
 
 export function QuickCaptureModal({
   isOpen,
@@ -22,6 +22,8 @@ export function QuickCaptureModal({
   const [tagInput, setTagInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [voiceMode, setVoiceMode] = useState(false);
+
+  const textareaRef = useRef(null);
 
   const {
     isListening,
@@ -83,7 +85,6 @@ export function QuickCaptureModal({
     if (suggestedCat && suggestedCat.id) {
       setSelectedCategoryId(suggestedCat.id);
     } else if (suggestedCat) {
-      // Find matching category in categories list
       const matched = categories.find(
         (c) => c.name.toLowerCase() === suggestedCat.name.toLowerCase()
       );
@@ -108,7 +109,7 @@ export function QuickCaptureModal({
 
   const handleSubmit = async (e) => {
     e?.preventDefault();
-    if (!content.trim()) return;
+    if (!content.trim() || saving) return;
 
     setSaving(true);
     try {
@@ -134,38 +135,54 @@ export function QuickCaptureModal({
     }
   };
 
+  // Keyboard shortcut Ctrl+Enter to save immediately
+  const handleKeyDown = (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      handleSubmit(e);
+    }
+  };
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="Capture Idea"
-      subtitle="Speak or type your thought. Organize it later."
-      maxWidth="620px"
-      drawerMobile={true}
+      subtitle="Quickly jot down or dictate a new thought"
+      maxWidth="540px"
     >
-      <form onSubmit={handleSubmit}>
-        {/* Toggle Voice / Text input */}
-        <div style={{ marginBottom: '1rem' }}>
-          <VoiceRecorder
-            isListening={isListening}
-            formattedDuration={formattedDuration}
-            isSupported={isSupported}
-            error={voiceError}
-            onStart={() => {
-              setVoiceMode(true);
-              startListening(content);
+      <form onSubmit={handleSubmit} onKeyDown={handleKeyDown}>
+        {/* Main Thought Box with embedded Voice Dictation */}
+        <div style={{ marginBottom: '0.85rem' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '0.4rem',
             }}
-            onStop={stopListening}
-            onReset={resetTranscript}
-          />
-        </div>
+          >
+            <label className="form-label" htmlFor="quick-capture-content" style={{ marginBottom: 0 }}>
+              What's on your mind? *
+            </label>
 
-        {/* Content text area */}
-        <div className="form-field-group">
-          <label className="form-label" htmlFor="quick-capture-content">
-            What are you thinking about?
-          </label>
+            {/* Compact Voice Dictation Pill */}
+            <VoiceRecorder
+              isListening={isListening}
+              formattedDuration={formattedDuration}
+              isSupported={isSupported}
+              error={voiceError}
+              onStart={() => {
+                setVoiceMode(true);
+                startListening(content);
+              }}
+              onStop={stopListening}
+              onReset={resetTranscript}
+              compact={true}
+            />
+          </div>
+
           <textarea
+            ref={textareaRef}
             id="quick-capture-content"
             className="form-textarea-control"
             rows={4}
@@ -174,22 +191,45 @@ export function QuickCaptureModal({
               setContent(e.target.value);
               setTranscript(e.target.value);
             }}
-            placeholder="e.g. Create an AI tool that compares student performance across courses..."
+            placeholder="e.g. Build an AI-assisted checklist organizer that syncs with personal projects..."
             autoFocus
-            style={{ fontSize: '1rem', lineHeight: '1.5' }}
+            style={{
+              fontSize: '0.94rem',
+              lineHeight: '1.5',
+              padding: '0.75rem',
+              resize: 'vertical',
+              minHeight: '90px',
+            }}
           />
         </div>
 
-        {/* Smart Generated Title */}
-        <div className="form-field-group" style={{ marginBottom: '0.85rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <label className="form-label" htmlFor="quick-capture-title">
+        {/* Compact Auto-Generated Title */}
+        <div style={{ marginBottom: '0.85rem' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '0.25rem',
+            }}
+          >
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
               Idea Title
-            </label>
-            <span style={{ fontSize: '0.75rem', color: 'var(--color-mustard)', display: 'flex', alignItems: 'center', gap: '3px' }}>
-              <Sparkles size={12} /> Auto-generated
+            </span>
+            <span
+              style={{
+                fontSize: '0.72rem',
+                color: 'var(--color-mustard)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px',
+                fontWeight: 600,
+              }}
+            >
+              <Sparkles size={11} /> Auto-suggested
             </span>
           </div>
+
           <input
             id="quick-capture-title"
             type="text"
@@ -199,28 +239,29 @@ export function QuickCaptureModal({
               setTitle(e.target.value);
               setCustomTitleEdited(true);
             }}
-            placeholder="Idea title (generated automatically if left blank)"
+            placeholder="Title will generate automatically from your note..."
+            style={{ padding: '0.5rem 0.75rem', fontSize: '0.88rem' }}
           />
         </div>
 
-        {/* Smart Category Suggestion Badge */}
+        {/* Category Suggestion Banner (if present and not selected yet) */}
         {suggestedCat && !selectedCategoryId && (
           <div
             style={{
-              padding: '0.65rem 0.85rem',
+              padding: '0.45rem 0.75rem',
               borderRadius: 'var(--radius-md)',
               backgroundColor: 'var(--color-mustard-subtle)',
               border: '1px solid var(--color-mustard-border)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              marginBottom: '1rem',
-              fontSize: '0.82rem',
+              marginBottom: '0.85rem',
+              fontSize: '0.8rem',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <Sparkles size={14} color="var(--color-mustard)" />
-              <span>Suggested category:</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <Sparkles size={13} color="var(--color-mustard)" />
+              <span>Suggested:</span>
               <strong style={{ color: 'var(--color-mustard)' }}>
                 {suggestedCat.icon} {suggestedCat.name}
               </strong>
@@ -231,24 +272,33 @@ export function QuickCaptureModal({
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '0.25rem',
+                gap: '0.2rem',
                 backgroundColor: 'var(--color-mustard)',
                 color: 'var(--color-mustard-contrast)',
-                padding: '0.25rem 0.6rem',
+                padding: '0.2rem 0.5rem',
                 borderRadius: 'var(--radius-sm)',
-                fontSize: '0.78rem',
+                fontSize: '0.74rem',
                 fontWeight: 700,
+                cursor: 'pointer',
               }}
             >
-              <Check size={12} /> Accept
+              <Check size={11} /> Apply
             </button>
           </div>
         )}
 
-        {/* Category Selector */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
-          <div className="form-field-group" style={{ marginBottom: 0 }}>
-            <label className="form-label" htmlFor="quick-capture-category">
+        {/* Compact Grid: Category & Priority */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1.2fr 1fr',
+            gap: '0.65rem',
+            marginBottom: '0.85rem',
+          }}
+        >
+          {/* Category */}
+          <div>
+            <label className="form-label" htmlFor="quick-capture-category" style={{ fontSize: '0.78rem', marginBottom: '0.25rem' }}>
               Category
             </label>
             <select
@@ -256,8 +306,9 @@ export function QuickCaptureModal({
               className="form-select-control"
               value={selectedCategoryId}
               onChange={(e) => setSelectedCategoryId(e.target.value)}
+              style={{ padding: '0.5rem 0.65rem', fontSize: '0.86rem' }}
             >
-              <option value="">Select later (Default)</option>
+              <option value="">📁 Uncategorized</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.icon} {c.name}
@@ -266,8 +317,9 @@ export function QuickCaptureModal({
             </select>
           </div>
 
-          <div className="form-field-group" style={{ marginBottom: 0 }}>
-            <label className="form-label" htmlFor="quick-capture-priority">
+          {/* Priority */}
+          <div>
+            <label className="form-label" htmlFor="quick-capture-priority" style={{ fontSize: '0.78rem', marginBottom: '0.25rem' }}>
               Priority
             </label>
             <select
@@ -275,6 +327,7 @@ export function QuickCaptureModal({
               className="form-select-control"
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
+              style={{ padding: '0.5rem 0.65rem', fontSize: '0.86rem' }}
             >
               <option value="Low">🟢 Low</option>
               <option value="Medium">🟡 Medium</option>
@@ -283,30 +336,35 @@ export function QuickCaptureModal({
           </div>
         </div>
 
-        {/* Tags Input */}
-        <div className="form-field-group" style={{ marginBottom: '1.25rem' }}>
-          <label className="form-label" htmlFor="quick-capture-tags">
-            Tags (press Enter or comma)
+        {/* Compact Tags Row */}
+        <div style={{ marginBottom: '1.25rem' }}>
+          <label className="form-label" htmlFor="quick-capture-tags" style={{ fontSize: '0.78rem', marginBottom: '0.25rem' }}>
+            Tags <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(press Enter to add)</span>
           </label>
           <div
             style={{
               display: 'flex',
               flexWrap: 'wrap',
-              gap: '0.4rem',
+              gap: '0.35rem',
               alignItems: 'center',
-              padding: '0.4rem 0.6rem',
+              padding: '0.35rem 0.55rem',
               backgroundColor: 'var(--bg-input)',
               border: '1px solid var(--border-color)',
               borderRadius: 'var(--radius-md)',
+              minHeight: '38px',
             }}
           >
             {tags.map((tag) => (
               <span
                 key={tag}
                 className="tag-chip mustard"
-                style={{ cursor: 'pointer' }}
+                style={{
+                  cursor: 'pointer',
+                  fontSize: '0.74rem',
+                  padding: '0.15rem 0.45rem',
+                }}
                 onClick={() => handleRemoveTag(tag)}
-                title="Click to remove"
+                title="Click to remove tag"
               >
                 #{tag} ×
               </span>
@@ -317,33 +375,50 @@ export function QuickCaptureModal({
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
               onKeyDown={handleAddTag}
-              placeholder={tags.length === 0 ? 'Type #AI, #Startup...' : ''}
+              placeholder={tags.length === 0 ? 'e.g. #AI, #Productivity...' : ''}
               style={{
                 border: 'none',
                 background: 'none',
                 outline: 'none',
                 color: 'var(--text-primary)',
-                fontSize: '0.85rem',
+                fontSize: '0.82rem',
                 flex: 1,
                 minWidth: '100px',
+                padding: '2px 4px',
               }}
             />
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.75rem' }}>
-          <Button variant="ghost" onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
-          <Button
-            variant="mustard"
-            type="submit"
-            loading={saving}
-            disabled={!content.trim()}
-          >
-            Save Idea
-          </Button>
+        {/* Action Footer */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingTop: '0.5rem',
+            borderTop: '1px solid var(--border-color)',
+          }}
+        >
+          <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+            Tip: Press <kbd style={{ padding: '2px 4px', borderRadius: '4px', backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border-color)' }}>Ctrl+Enter</kbd> to save
+          </span>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <Button variant="ghost" size="sm" onClick={onClose} disabled={saving}>
+              Cancel
+            </Button>
+            <Button
+              variant="mustard"
+              size="sm"
+              type="submit"
+              loading={saving}
+              disabled={!content.trim()}
+              style={{ fontWeight: 700, padding: '0.5rem 1.1rem' }}
+            >
+              Save Idea
+            </Button>
+          </div>
         </div>
       </form>
     </Modal>

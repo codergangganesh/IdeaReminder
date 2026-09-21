@@ -1,15 +1,18 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, Lightbulb, Compass, Star, User, Plus } from 'lucide-react';
+import { Home, Lightbulb, ListTodo, FolderKanban, Star, User, Plus } from 'lucide-react';
 
 export function MobileBottomNav({ onQuickCapture }) {
   const location = useLocation();
   const isProfile = location.pathname === '/profile';
+  const isChecklists = location.pathname === '/checklists';
+  const isFolders = location.pathname === '/categories';
+  const hideFab = isProfile || isChecklists || isFolders;
 
   return (
     <>
-      {/* Floating Action Button for instant mobile capture (Hidden on Profile section) */}
-      {!isProfile && (
+      {/* Floating Action Button for instant mobile capture (Hidden on Profile, Checklists, and Folders) */}
+      {!hideFab && (
         <button
           type="button"
           className="fab-capture-btn"
@@ -30,7 +33,7 @@ export function MobileBottomNav({ onQuickCapture }) {
         >
           {({ isActive }) => (
             <>
-              <Home size={20} />
+              <Home size={19} />
               <span>Home</span>
               {isActive && <span className="mobile-nav-active-dot" />}
             </>
@@ -43,8 +46,21 @@ export function MobileBottomNav({ onQuickCapture }) {
         >
           {({ isActive }) => (
             <>
-              <Lightbulb size={20} />
+              <Lightbulb size={19} />
               <span>Ideas</span>
+              {isActive && <span className="mobile-nav-active-dot" />}
+            </>
+          )}
+        </NavLink>
+
+        <NavLink
+          to="/checklists"
+          className={({ isActive }) => `mobile-nav-item ${isActive ? 'active' : ''}`}
+        >
+          {({ isActive }) => (
+            <>
+              <ListTodo size={19} />
+              <span>Tasks</span>
               {isActive && <span className="mobile-nav-active-dot" />}
             </>
           )}
@@ -56,8 +72,8 @@ export function MobileBottomNav({ onQuickCapture }) {
         >
           {({ isActive }) => (
             <>
-              <Compass size={20} />
-              <span>Explore</span>
+              <FolderKanban size={19} />
+              <span>Folders</span>
               {isActive && <span className="mobile-nav-active-dot" />}
             </>
           )}
@@ -69,21 +85,8 @@ export function MobileBottomNav({ onQuickCapture }) {
         >
           {({ isActive }) => (
             <>
-              <Star size={20} />
-              <span>Favorites</span>
-              {isActive && <span className="mobile-nav-active-dot" />}
-            </>
-          )}
-        </NavLink>
-
-        <NavLink
-          to="/profile"
-          className={({ isActive }) => `mobile-nav-item ${isActive ? 'active' : ''}`}
-        >
-          {({ isActive }) => (
-            <>
-              <User size={20} />
-              <span>Profile</span>
+              <Star size={19} />
+              <span>Saved</span>
               {isActive && <span className="mobile-nav-active-dot" />}
             </>
           )}

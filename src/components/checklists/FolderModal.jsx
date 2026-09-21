@@ -1,52 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
+import { DEFAULT_FOLDER_ICONS, DEFAULT_FOLDER_COLORS } from '../../services/checklistService';
 
-const EMOJI_PRESETS = [
-  '💡', '🤖', '💻', '🚀', '📚', '🧪', '💼', '🛠️',
-  '🎨', '📱', '🌐', '💰', '📝', '🎯', '🔥', '⚡', '🌟', '🧠'
-];
-
-const COLOR_PRESETS = [
-  '#D4A72C', // Mustard
-  '#3B82F6', // Blue
-  '#8B5CF6', // Purple
-  '#10B981', // Green
-  '#F59E0B', // Amber
-  '#EC4899', // Pink
-  '#06B6D4', // Cyan
-  '#6366F1', // Indigo
-  '#F43F5E', // Rose
-  '#14B8A6', // Teal
-  '#A855F7', // Violet
-  '#64748B', // Slate
-];
-
-export function CategoryModal({
+export function FolderModal({
   isOpen,
   onClose,
-  category,
+  folder,
   onSave,
 }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [icon, setIcon] = useState('💡');
+  const [icon, setIcon] = useState('📁');
   const [color, setColor] = useState('#D4A72C');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (category) {
-      setName(category.name || '');
-      setDescription(category.description || '');
-      setIcon(category.icon || '💡');
-      setColor(category.color || '#D4A72C');
+    if (folder) {
+      setName(folder.name || '');
+      setDescription(folder.description || '');
+      setIcon(folder.icon || '📁');
+      setColor(folder.color || '#D4A72C');
     } else {
       setName('');
       setDescription('');
-      setIcon('💡');
+      setIcon('📁');
       setColor('#D4A72C');
     }
-  }, [category, isOpen]);
+  }, [folder, isOpen]);
 
   const handleSubmit = async (e) => {
     e?.preventDefault();
@@ -62,7 +43,7 @@ export function CategoryModal({
       });
       onClose();
     } catch (err) {
-      console.error('Save category error:', err);
+      console.error('Save folder error:', err);
     } finally {
       setSaving(false);
     }
@@ -72,22 +53,23 @@ export function CategoryModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={category ? 'Edit Category' : 'Create New Category'}
-      maxWidth="520px"
+      title={folder ? 'Edit Folder' : 'Create New Folder'}
+      subtitle="Organize your checklists into categorized workspaces"
+      maxWidth="500px"
     >
       <form onSubmit={handleSubmit}>
         {/* Name input */}
         <div className="form-field-group">
-          <label className="form-label" htmlFor="cat-name">
-            Category Name *
+          <label className="form-label" htmlFor="folder-name">
+            Folder Name *
           </label>
           <input
-            id="cat-name"
+            id="folder-name"
             type="text"
             className="form-input-control"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. AI Projects, Startup Ideas, Daily Notes..."
+            placeholder="e.g. Work Sprints, Launch Prep, Daily Tasks..."
             required
             autoFocus
           />
@@ -95,22 +77,22 @@ export function CategoryModal({
 
         {/* Description input */}
         <div className="form-field-group">
-          <label className="form-label" htmlFor="cat-desc">
+          <label className="form-label" htmlFor="folder-desc">
             Description (Optional)
           </label>
           <textarea
-            id="cat-desc"
+            id="folder-desc"
             className="form-textarea-control"
             rows={2}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Brief explanation of ideas in this category"
+            placeholder="Brief summary of checklists in this folder"
           />
         </div>
 
         {/* Icon Picker */}
         <div className="form-field-group">
-          <label className="form-label">Category Icon</label>
+          <label className="form-label">Folder Icon</label>
           <div
             style={{
               display: 'flex',
@@ -122,7 +104,7 @@ export function CategoryModal({
               border: '1px solid var(--border-color)',
             }}
           >
-            {EMOJI_PRESETS.map((emoji) => (
+            {DEFAULT_FOLDER_ICONS.map((emoji) => (
               <button
                 key={emoji}
                 type="button"
@@ -138,6 +120,7 @@ export function CategoryModal({
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
+                  transition: 'all var(--transition-fast)',
                 }}
               >
                 {emoji}
@@ -148,7 +131,7 @@ export function CategoryModal({
 
         {/* Color Picker */}
         <div className="form-field-group" style={{ marginBottom: '1.5rem' }}>
-          <label className="form-label">Accent Color</label>
+          <label className="form-label">Folder Accent Color</label>
           <div
             style={{
               display: 'flex',
@@ -160,7 +143,7 @@ export function CategoryModal({
               border: '1px solid var(--border-color)',
             }}
           >
-            {COLOR_PRESETS.map((preset) => (
+            {DEFAULT_FOLDER_COLORS.map((preset) => (
               <button
                 key={preset}
                 type="button"
@@ -173,6 +156,7 @@ export function CategoryModal({
                   border: color === preset ? '3px solid #FFFFFF' : '1px solid rgba(0,0,0,0.1)',
                   boxShadow: color === preset ? '0 0 0 2px var(--color-mustard)' : 'none',
                   cursor: 'pointer',
+                  transform: color === preset ? 'scale(1.15)' : 'scale(1)',
                   transition: 'transform var(--transition-fast)',
                 }}
               />
@@ -186,7 +170,7 @@ export function CategoryModal({
             Cancel
           </Button>
           <Button variant="mustard" type="submit" loading={saving} disabled={!name.trim()}>
-            {category ? 'Save Changes' : 'Create Category'}
+            {folder ? 'Save Changes' : 'Create Folder'}
           </Button>
         </div>
       </form>

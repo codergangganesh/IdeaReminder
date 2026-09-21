@@ -9,6 +9,7 @@ import { ForgotPassword } from './pages/ForgotPassword';
 import { Dashboard } from './pages/Dashboard';
 import { Ideas } from './pages/Ideas';
 import { IdeaDetail } from './pages/IdeaDetail';
+import { Checklists } from './pages/Checklists';
 import { Categories } from './pages/Categories';
 import { Favorites } from './pages/Favorites';
 import { Profile } from './pages/Profile';
@@ -109,6 +110,7 @@ export function App() {
           <Route index element={<Dashboard />} />
           <Route path="ideas" element={<Ideas />} />
           <Route path="ideas/:id" element={<IdeaDetail />} />
+          <Route path="checklists" element={<Checklists />} />
           <Route path="categories" element={<Categories />} />
           <Route path="favorites" element={<Favorites />} />
           <Route path="profile" element={<Profile />} />

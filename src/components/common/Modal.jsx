@@ -8,8 +8,7 @@ export function Modal({
   subtitle,
   children,
   footer,
-  maxWidth = '600px',
-  drawerMobile = false,
+  maxWidth = '580px',
 }) {
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -33,11 +32,11 @@ export function Modal({
 
   return (
     <div
-      className={`modal-overlay ${drawerMobile ? 'is-drawer-mobile' : ''}`}
+      className="modal-overlay"
       onClick={onClose}
     >
       <div
-        className={`modal-container ${drawerMobile ? 'is-drawer-mobile' : ''}`}
+        className="modal-container"
         style={{ maxWidth }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
@@ -45,17 +44,21 @@ export function Modal({
       >
         <div className="modal-header">
           <div>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>{title}</h3>
+            <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+              {title}
+            </div>
             {subtitle && (
-              <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+              <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                 {subtitle}
-              </p>
+              </div>
             )}
           </div>
           <button
+            type="button"
             className="btn-icon"
             onClick={onClose}
-            aria-label="Close modal"
+            aria-label="Close drawer"
+            title="Close"
           >
             <X size={18} />
           </button>

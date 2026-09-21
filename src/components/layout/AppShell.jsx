@@ -7,6 +7,7 @@ import { QuickCaptureModal } from '../ideas/QuickCaptureModal';
 import { IdeaEditorModal } from '../ideas/IdeaEditorModal';
 import { useIdeas } from '../../hooks/useIdeas';
 import { useCategories } from '../../hooks/useCategories';
+import { useChecklists } from '../../hooks/useChecklists';
 
 export function AppShell() {
   const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
@@ -15,6 +16,23 @@ export function AppShell() {
 
   const { ideas, addIdea, editIdea, deleteIdea, toggleFavorite, changeStatus } = useIdeas();
   const { categories, addCategory } = useCategories();
+  const {
+    folders,
+    checklists,
+    loading: checklistsLoading,
+    addFolder,
+    editFolder,
+    deleteFolder,
+    addChecklist,
+    editChecklist,
+    deleteChecklist,
+    togglePinChecklist,
+    addItem,
+    editItem,
+    deleteItem,
+    toggleItem,
+    clearCompleted,
+  } = useChecklists();
 
   const handleOpenEditor = (idea) => {
     setEditorIdea(idea);
@@ -28,6 +46,7 @@ export function AppShell() {
       {/* Desktop Sidebar */}
       <Sidebar
         ideasCount={ideas.length}
+        checklistsCount={checklists.length}
         favoritesCount={favoritesCount}
         onQuickCapture={() => setQuickCaptureOpen(true)}
       />
@@ -37,7 +56,7 @@ export function AppShell() {
         <TopBar onQuickCapture={() => setQuickCaptureOpen(true)} />
 
         <main className="content-body">
-          {/* Provide ideas and categories to child routes via context/props */}
+          {/* Provide ideas, categories, and checklists to child routes via context */}
           <Outlet
             context={{
               ideas,
@@ -50,6 +69,22 @@ export function AppShell() {
               onToggleFavorite: toggleFavorite,
               onChangeStatus: changeStatus,
               onAddCategory: addCategory,
+              // Checklists & Folders Context
+              folders,
+              checklists,
+              checklistsLoading,
+              onAddFolder: addFolder,
+              onEditFolder: editFolder,
+              onDeleteFolder: deleteFolder,
+              onAddChecklist: addChecklist,
+              onEditChecklist: editChecklist,
+              onDeleteChecklist: deleteChecklist,
+              onTogglePinChecklist: togglePinChecklist,
+              onAddItem: addItem,
+              onEditItem: editItem,
+              onDeleteItem: deleteItem,
+              onToggleItem: toggleItem,
+              onClearCompleted: clearCompleted,
             }}
           />
         </main>

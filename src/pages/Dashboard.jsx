@@ -1,10 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/common/Button';
 import { IdeaCard } from '../components/ideas/IdeaCard';
 import { EmptyState } from '../components/common/EmptyState';
+import { ChecklistCard } from '../components/checklists/ChecklistCard';
+import { ChecklistModal } from '../components/checklists/ChecklistModal';
+import { FolderModal } from '../components/checklists/FolderModal';
+import { ChecklistDetailModal } from '../components/checklists/ChecklistDetailModal';
 import { ideaService } from '../services/ideaService';
+import { checklistService } from '../services/checklistService';
 import {
   Plus,
   Lightbulb,
@@ -12,7 +17,9 @@ import {
   Star,
   Activity,
   ArrowRight,
-  Mic,
+  ListTodo,
+  CheckCircle2,
+  FolderPlus,
 } from 'lucide-react';
 
 function getGreeting() {
@@ -31,10 +38,32 @@ export function Dashboard() {
     onDeleteIdea,
     onToggleFavorite,
     onChangeStatus,
+    // Checklists & Folders Context
+    folders = [],
+    checklists = [],
+    onAddFolder,
+    onEditFolder,
+    onDeleteFolder,
+    onAddChecklist,
+    onEditChecklist,
+    onDeleteChecklist,
+    onTogglePinChecklist,
+    onAddItem,
+    onEditItem,
+    onDeleteItem,
+    onToggleItem,
+    onClearCompleted,
   } = useOutletContext();
 
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  // Local modal state for creating/editing checklists directly from dashboard
+  const [checklistModalOpen, setChecklistModalOpen] = useState(false);
+  const [selectedChecklist, setSelectedChecklist] = useState(null);
+  const [folderModalOpen, setFolderModalOpen] = useState(false);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [detailChecklist, setDetailChecklist] = useState(null);
 
   const displayName =
     user?.name ||
@@ -43,10 +72,45 @@ export function Dashboard() {
     'there';
 
   const stats = ideaService.calculateStats(ideas, categories);
+  const clStats = checklistService.calculateStats(checklists);
   const recentIdeas = ideas.slice(0, 6);
 
+  // Top 3 active or pinned checklists to display on dashboard
+  const dashboardChecklists = checklists.slice(0, 3);
+
+  const handleOpenCreateChecklist = () => {
+    setSelectedChecklist(null);
+    setChecklistModalOpen(true);
+  };
+
+  const handleOpenEditChecklist = (cl) => {
+    setSelectedChecklist(cl);
+    setChecklistModalOpen(true);
+  };
+
+  const handleOpenDetail = (cl) => {
+    setDetailChecklist(cl);
+    setDetailModalOpen(true);
+  };
+
+  const handleSaveChecklist = async (data) => {
+    if (selectedChecklist) {
+      await onEditChecklist(selectedChecklist.id, data);
+    } else {
+      await onAddChecklist(data);
+    }
+  };
+
+  const handleSaveFolder = async (data) => {
+    await onAddFolder(data);
+  };
+
+  const currentDetailChecklist = detailChecklist
+    ? checklists.find((cl) => cl.id === detailChecklist.id) || null
+    : null;
+
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in" style={{ paddingBottom: '3rem' }}>
       {/* Hero Welcome Header */}
       <div className="dashboard-hero-card">
         <div>
@@ -69,23 +133,12 @@ export function Dashboard() {
               fontSize: '0.92rem',
               color: 'var(--text-secondary)',
               marginTop: '0.35rem',
-              maxWidth: '520px',
+              maxWidth: '600px',
             }}
           >
             Capture your next idea before you forget it. Voice or text, anytime.
           </p>
         </div>
-
-        <Button
-          variant="mustard"
-          size="lg"
-          icon={Plus}
-          onClick={onQuickCapture}
-          className="dashboard-hero-btn"
-          style={{ fontWeight: 700, boxShadow: 'var(--shadow-mustard)' }}
-        >
-          Capture New Idea
-        </Button>
       </div>
 
       {/* Metrics Row */}
@@ -208,8 +261,7 @@ export function Dashboard() {
       </div>
 
       {/* Main Grid: Category Breakdown + Recent Ideas */}
-      <div className="dashboard-split-grid">
-
+      <div className="dashboard-split-grid" style={{ marginBottom: '2.5rem' }}>
         {/* Left Column: Ideas by Category */}
         <div
           className="iv-card"
@@ -351,6 +403,176 @@ export function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* --- NEW SECTION: Active Checklists & To-Do Lists --- */}
+      <div className="dashboard-checklists-section" style={{ marginTop: '2rem' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '1rem',
+            marginBottom: '1.25rem',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <ListTodo size={20} className="mustard-text" />
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>
+                My Checklists & Tasks
+              </h3>
+            </div>
+            <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', marginTop: '0.2rem', marginBottom: 0 }}>
+              Track multi-step goals, projects, and actionable items across folders
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <Button
+              variant="mustard"
+              size="sm"
+              icon={Plus}
+              onClick={handleOpenCreateChecklist}
+              style={{ fontWeight: 700 }}
+            >
+              New Checklist
+            </Button>
+
+            <button
+              type="button"
+              onClick={() => navigate('/checklists')}
+              style={{
+                fontSize: '0.85rem',
+                color: 'var(--color-mustard)',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+                cursor: 'pointer',
+              }}
+            >
+              All Checklists <ArrowRight size={14} />
+            </button>
+          </div>
+        </div>
+
+        {checklists.length === 0 ? (
+          <div
+            className="iv-card"
+            style={{
+              padding: '2.5rem 1.5rem',
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px dashed var(--border-color)',
+            }}
+          >
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: 'var(--color-mustard-subtle)',
+                color: 'var(--color-mustard)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '1rem',
+              }}
+            >
+              <ListTodo size={24} />
+            </div>
+            <h4 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.35rem' }}>
+              No checklists created yet
+            </h4>
+            <p
+              style={{
+                fontSize: '0.88rem',
+                color: 'var(--text-secondary)',
+                maxWidth: '440px',
+                marginBottom: '1.25rem',
+              }}
+            >
+              Not everything is just an idea. If you have tasks, actionable steps, or multi-item projects, organize them into a checklist!
+            </p>
+            <Button
+              variant="mustard"
+              icon={Plus}
+              onClick={handleOpenCreateChecklist}
+              style={{ fontWeight: 700 }}
+            >
+              Create Your First Checklist
+            </Button>
+          </div>
+        ) : (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+              gap: '1.25rem',
+              alignItems: 'start',
+            }}
+          >
+            {dashboardChecklists.map((checklist) => (
+              <ChecklistCard
+                key={checklist.id}
+                checklist={checklist}
+                folders={folders}
+                onToggleItem={onToggleItem}
+                onAddItem={onAddItem}
+                onDeleteItem={onDeleteItem}
+                onEditChecklist={handleOpenEditChecklist}
+                onDeleteChecklist={onDeleteChecklist}
+                onTogglePin={onTogglePinChecklist}
+                onClearCompleted={onClearCompleted}
+                onOpenDetail={handleOpenDetail}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Checklist Modal for Dashboard Quick Creation */}
+      <ChecklistModal
+        isOpen={checklistModalOpen}
+        onClose={() => setChecklistModalOpen(false)}
+        checklist={selectedChecklist}
+        folders={folders}
+        onSave={handleSaveChecklist}
+        onOpenCreateFolder={() => {
+          setChecklistModalOpen(false);
+          setFolderModalOpen(true);
+        }}
+      />
+
+      {/* Folder Modal for Dashboard Quick Creation */}
+      <FolderModal
+        isOpen={folderModalOpen}
+        onClose={() => setFolderModalOpen(false)}
+        onSave={handleSaveFolder}
+      />
+
+      {/* Detail Modal */}
+      {currentDetailChecklist && (
+        <ChecklistDetailModal
+          isOpen={detailModalOpen}
+          onClose={() => {
+            setDetailModalOpen(false);
+            setDetailChecklist(null);
+          }}
+          checklist={currentDetailChecklist}
+          folders={folders}
+          onToggleItem={onToggleItem}
+          onAddItem={onAddItem}
+          onEditItem={onEditItem}
+          onDeleteItem={onDeleteItem}
+          onClearCompleted={onClearCompleted}
+          onOpenEditChecklist={handleOpenEditChecklist}
+        />
+      )}
     </div>
   );
 }

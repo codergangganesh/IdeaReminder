@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Lightbulb,
+  ListTodo,
   FolderKanban,
   Star,
   Plus,
@@ -12,7 +13,7 @@ import { useAuth, extractAvatar } from '../../context/AuthContext';
 import { Button } from '../common/Button';
 import logoImg from '../../assets/logo.png';
 
-export function Sidebar({ ideasCount = 0, favoritesCount = 0, onQuickCapture }) {
+export function Sidebar({ ideasCount = 0, checklistsCount = 0, favoritesCount = 0, onQuickCapture }) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [imgError, setImgError] = useState(false);
@@ -74,6 +75,15 @@ export function Sidebar({ ideasCount = 0, favoritesCount = 0, onQuickCapture }) 
           <Lightbulb size={18} />
           <span>All Ideas</span>
           {ideasCount > 0 && <span className="nav-badge">{ideasCount}</span>}
+        </NavLink>
+
+        <NavLink
+          to="/checklists"
+          className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+        >
+          <ListTodo size={18} />
+          <span>Checklists</span>
+          {checklistsCount > 0 && <span className="nav-badge">{checklistsCount}</span>}
         </NavLink>
 
         <NavLink
