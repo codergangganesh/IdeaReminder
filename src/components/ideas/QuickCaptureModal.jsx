@@ -22,8 +22,10 @@ export function QuickCaptureModal({
   const [tagInput, setTagInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [voiceMode, setVoiceMode] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
 
   const textareaRef = useRef(null);
+  const DRAFT_KEY = 'ideavault_quick_capture_draft';
 
   const {
     isListening,
@@ -37,9 +39,29 @@ export function QuickCaptureModal({
     resetTranscript,
   } = useVoiceRecognition();
 
-  // Reset modal state when opening
+  // Restore draft or reset modal state when opening
   useEffect(() => {
     if (isOpen) {
+      try {
+        const saved = localStorage.getItem(DRAFT_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed?.content?.trim()) {
+            setContent(parsed.content || '');
+            setTitle(parsed.title || '');
+            setCustomTitleEdited(Boolean(parsed.customTitleEdited));
+            setSelectedCategoryId(parsed.selectedCategoryId || '');
+            setPriority(parsed.priority || 'Medium');
+            setTags(Array.isArray(parsed.tags) ? parsed.tags : []);
+            setHasDraft(true);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Could not restore draft:', err);
+      }
+
+      // No draft found: clean state
       setContent('');
       setTitle('');
       setCustomTitleEdited(false);
@@ -48,9 +70,37 @@ export function QuickCaptureModal({
       setPriority('Medium');
       setTags([]);
       setTagInput('');
+      setHasDraft(false);
       resetTranscript();
     }
   }, [isOpen, resetTranscript]);
+
+  // Auto-save draft to localStorage whenever fields change
+  useEffect(() => {
+    if (!isOpen) return;
+    if (content.trim()) {
+      try {
+        localStorage.setItem(
+          DRAFT_KEY,
+          JSON.stringify({
+            content,
+            title,
+            customTitleEdited,
+            selectedCategoryId,
+            priority,
+            tags,
+            savedAt: Date.now(),
+          })
+        );
+        setHasDraft(true);
+      } catch (e) {
+        console.warn('Draft save notice:', e);
+      }
+    } else {
+      localStorage.removeItem(DRAFT_KEY);
+      setHasDraft(false);
+    }
+  }, [isOpen, content, title, customTitleEdited, selectedCategoryId, priority, tags]);
 
   // Sync voice transcript to content
   useEffect(() => {
@@ -92,6 +142,20 @@ export function QuickCaptureModal({
     }
   };
 
+  const handleDiscardDraft = () => {
+    localStorage.removeItem(DRAFT_KEY);
+    setContent('');
+    setTitle('');
+    setCustomTitleEdited(false);
+    setSelectedCategoryId('');
+    setSuggestedCat(null);
+    setPriority('Medium');
+    setTags([]);
+    setTagInput('');
+    setHasDraft(false);
+    resetTranscript();
+  };
+
   const handleAddTag = (e) => {
     if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault();
@@ -127,6 +191,9 @@ export function QuickCaptureModal({
         voice_captured: voiceMode || Boolean(transcript),
       });
 
+      // Clear draft on successful save
+      localStorage.removeItem(DRAFT_KEY);
+      setHasDraft(false);
       onClose();
     } catch (err) {
       console.error('Quick capture error:', err);
@@ -151,6 +218,41 @@ export function QuickCaptureModal({
       maxWidth="540px"
     >
       <form onSubmit={handleSubmit} onKeyDown={handleKeyDown}>
+        {/* In-progress Draft Banner */}
+        {hasDraft && (
+          <div
+            style={{
+              padding: '0.35rem 0.65rem',
+              borderRadius: 'var(--radius-md)',
+              backgroundColor: 'var(--bg-subtle)',
+              border: '1px solid var(--border-color)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '0.75rem',
+              fontSize: '0.76rem',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            <span>💾 Draft restored from previous edit</span>
+            <button
+              type="button"
+              onClick={handleDiscardDraft}
+              style={{
+                color: '#EF4444',
+                fontSize: '0.74rem',
+                fontWeight: 600,
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '0 0.25rem',
+              }}
+            >
+              Discard
+            </button>
+          </div>
+        )}
+
         {/* Main Thought Box with embedded Voice Dictation */}
         <div style={{ marginBottom: '0.85rem' }}>
           <div

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { checklistService } from '../services/checklistService';
+import { realtimeService } from '../services/realtimeService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import confetti from 'canvas-confetti';
@@ -13,7 +14,7 @@ export function useChecklists() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (isBackground = false) => {
     if (!user) {
       setFolders([]);
       setChecklists([]);
@@ -21,7 +22,7 @@ export function useChecklists() {
       return;
     }
 
-    setLoading(true);
+    if (!isBackground) setLoading(true);
     try {
       const [fetchedFolders, fetchedChecklists] = await Promise.all([
         checklistService.getFolders(),
@@ -45,13 +46,27 @@ export function useChecklists() {
         setError(err.message);
       }
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   }, [user, signOut]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Wire InsForge Realtime sync for cross-tab & multi-device updates
+  useEffect(() => {
+    if (!user?.id) return;
+    realtimeService.init(user.id);
+
+    const unsubscribe = realtimeService.on('checklists:changed', () => {
+      fetchData(true);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [user?.id, fetchData]);
 
   // --- Folder operations ---
   const addFolder = async (folderData) => {
@@ -60,6 +75,7 @@ export function useChecklists() {
       const created = await checklistService.createFolder(folderData, user.id);
       setFolders((prev) => [...prev, created]);
       showToast('✓ Folder created successfully', 'success');
+      realtimeService.broadcast('checklists:changed');
       return created;
     } catch (err) {
       console.error('Add folder error:', err);
@@ -73,6 +89,7 @@ export function useChecklists() {
       const updated = await checklistService.updateFolder(folderId, updates);
       setFolders((prev) => prev.map((f) => (f.id === folderId ? updated : f)));
       showToast('✓ Folder updated', 'success');
+      realtimeService.broadcast('checklists:changed');
       return updated;
     } catch (err) {
       console.error('Update folder error:', err);
@@ -90,6 +107,7 @@ export function useChecklists() {
         prev.map((cl) => (cl.folder_id === folderId ? { ...cl, folder_id: null } : cl))
       );
       showToast('✓ Folder removed', 'success');
+      realtimeService.broadcast('checklists:changed');
       return true;
     } catch (err) {
       console.error('Delete folder error:', err);
@@ -105,6 +123,7 @@ export function useChecklists() {
       const created = await checklistService.createChecklist(checklistData, user.id);
       setChecklists((prev) => [created, ...prev]);
       showToast('✓ Checklist created', 'success');
+      realtimeService.broadcast('checklists:changed');
       return created;
     } catch (err) {
       console.error('Add checklist error:', err);
@@ -120,6 +139,7 @@ export function useChecklists() {
         prev.map((cl) => (cl.id === checklistId ? { ...cl, ...updated } : cl))
       );
       showToast('✓ Checklist updated', 'success');
+      realtimeService.broadcast('checklists:changed');
       return updated;
     } catch (err) {
       console.error('Update checklist error:', err);
@@ -133,6 +153,7 @@ export function useChecklists() {
       await checklistService.deleteChecklist(checklistId);
       setChecklists((prev) => prev.filter((cl) => cl.id !== checklistId));
       showToast('✓ Checklist deleted', 'success');
+      realtimeService.broadcast('checklists:changed');
       return true;
     } catch (err) {
       console.error('Delete checklist error:', err);
@@ -153,6 +174,7 @@ export function useChecklists() {
     try {
       await checklistService.togglePin(checklistId, target.is_pinned);
       showToast(newPinned ? 'Checklist pinned 📌' : 'Checklist unpinned', 'info');
+      realtimeService.broadcast('checklists:changed');
     } catch (err) {
       setChecklists((prev) =>
         prev.map((cl) => (cl.id === checklistId ? { ...cl, is_pinned: target.is_pinned } : cl))
@@ -185,6 +207,7 @@ export function useChecklists() {
         })
       );
 
+      realtimeService.broadcast('checklists:changed');
       return createdItem;
     } catch (err) {
       console.error('Add item error:', err);
@@ -207,6 +230,7 @@ export function useChecklists() {
           return cl;
         })
       );
+      realtimeService.broadcast('checklists:changed');
       return updatedItem;
     } catch (err) {
       console.error('Edit item error:', err);
@@ -230,6 +254,7 @@ export function useChecklists() {
         })
       );
       showToast('Task removed', 'info');
+      realtimeService.broadcast('checklists:changed');
       return true;
     } catch (err) {
       console.error('Delete item error:', err);
@@ -282,6 +307,7 @@ export function useChecklists() {
 
     try {
       await checklistService.toggleItemCompletion(itemId, targetItem.is_completed);
+      realtimeService.broadcast('checklists:changed');
     } catch (err) {
       // Revert optimistic update on failure
       setChecklists((prev) =>
@@ -316,6 +342,7 @@ export function useChecklists() {
         })
       );
       showToast('Cleared completed tasks', 'info');
+      realtimeService.broadcast('checklists:changed');
       return true;
     } catch (err) {
       console.error('Clear completed error:', err);

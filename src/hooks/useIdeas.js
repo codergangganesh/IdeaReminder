@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ideaService } from '../services/ideaService';
+import { realtimeService } from '../services/realtimeService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import confetti from 'canvas-confetti';
@@ -11,13 +12,13 @@ export function useIdeas() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const fetchIdeas = useCallback(async () => {
+  const fetchIdeas = useCallback(async (isBackground = false) => {
     if (!user) {
       setIdeas([]);
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!isBackground) setLoading(true);
     try {
       const data = await ideaService.getIdeas();
       setIdeas(data);
@@ -36,7 +37,7 @@ export function useIdeas() {
         setError(err.message);
       }
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   }, [user, signOut]);
 
@@ -44,12 +45,27 @@ export function useIdeas() {
     fetchIdeas();
   }, [fetchIdeas]);
 
+  // Wire Realtime sync for live multi-tab & multi-device updates
+  useEffect(() => {
+    if (!user?.id) return;
+    realtimeService.init(user.id);
+
+    const unsubscribe = realtimeService.on('ideas:changed', () => {
+      fetchIdeas(true);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [user?.id, fetchIdeas]);
+
   const addIdea = async (ideaData) => {
     if (!user) return null;
     try {
       const created = await ideaService.createIdea(ideaData, user.id);
       setIdeas((prev) => [created, ...prev]);
       showToast('✓ Idea saved successfully', 'success');
+      realtimeService.broadcast('ideas:changed');
 
       // Play soft celebratory confetti
       try {
@@ -76,6 +92,7 @@ export function useIdeas() {
       const updated = await ideaService.updateIdea(id, updates);
       setIdeas((prev) => prev.map((item) => (item.id === id ? updated : item)));
       showToast('✓ Idea updated', 'success');
+      realtimeService.broadcast('ideas:changed');
       return updated;
     } catch (err) {
       showToast(err.message || 'Failed to update idea', 'error');
@@ -88,6 +105,7 @@ export function useIdeas() {
       await ideaService.deleteIdea(id);
       setIdeas((prev) => prev.filter((item) => item.id !== id));
       showToast('✓ Idea deleted', 'success');
+      realtimeService.broadcast('ideas:changed');
       return true;
     } catch (err) {
       showToast(err.message || 'Failed to delete idea', 'error');
@@ -108,6 +126,7 @@ export function useIdeas() {
     try {
       await ideaService.toggleFavorite(id, target.is_favorite);
       showToast(newFav ? 'Marked as favorite ⭐' : 'Removed from favorites', 'info');
+      realtimeService.broadcast('ideas:changed');
     } catch (err) {
       // Revert on error
       setIdeas((prev) =>
@@ -128,6 +147,7 @@ export function useIdeas() {
     try {
       await ideaService.updateStatus(id, newStatus);
       showToast(`Status updated to ${newStatus}`, 'info');
+      realtimeService.broadcast('ideas:changed');
     } catch (err) {
       setIdeas((prev) =>
         prev.map((i) => (i.id === id ? { ...i, status: target.status } : i))

@@ -2,9 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
 import { DEFAULT_FOLDER_COLORS } from '../../services/checklistService';
-import { FolderPlus, Plus, Trash2 } from 'lucide-react';
+import { aiService } from '../../services/aiService';
+import { useToast } from '../../context/ToastContext';
+import { FolderPlus, Plus, Trash2, Sparkles, Loader2 } from 'lucide-react';
 
-const CHECKLIST_ICONS = ['📝', '✅', '🎯', '🚀', '⚡', '🛒', '💻', '📌', '💡', '🏷️', '📋', '🔥'];
+const CHECKLIST_ICONS = ['📝', '✅', '🎯', '🚀', '⚡', '🛒', '💻', '📌', '💡', '🏷️', '📋', '🔥', '✈️', '📈', '🛠️', '📚'];
+
+const QUICK_AI_PROMPTS = [
+  '🚀 Launch MVP on ProductHunt',
+  '📊 Plan Weekly Sprint & Backlog',
+  '✈️ Vacation & Trip Packing',
+  '🔍 Debug & Fix Critical Bug',
+  '🛒 Weekly Meal Prep & Groceries',
+];
 
 export function ChecklistModal({
   isOpen,
@@ -15,6 +25,8 @@ export function ChecklistModal({
   onSave,
   onOpenCreateFolder,
 }) {
+  const { showToast } = useToast();
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [folderId, setFolderId] = useState('');
@@ -22,6 +34,10 @@ export function ChecklistModal({
   const [color, setColor] = useState('#D4A72C');
   const [initialItems, setInitialItems] = useState(['', '']);
   const [saving, setSaving] = useState(false);
+  const [generatingAI, setGeneratingAI] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
+
+  const DRAFT_KEY = 'ideavault_checklist_draft';
 
   useEffect(() => {
     if (checklist) {
@@ -31,15 +47,84 @@ export function ChecklistModal({
       setIcon(checklist.icon || '📝');
       setColor(checklist.color || '#D4A72C');
       setInitialItems([]);
-    } else {
+      setHasDraft(false);
+    } else if (isOpen) {
+      try {
+        const saved = localStorage.getItem(DRAFT_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (
+            parsed?.title?.trim() ||
+            parsed?.description?.trim() ||
+            (Array.isArray(parsed?.initialItems) && parsed.initialItems.some((i) => i.trim()))
+          ) {
+            setTitle(parsed.title || '');
+            setDescription(parsed.description || '');
+            setFolderId(parsed.folderId || defaultFolderId || '');
+            setIcon(parsed.icon || '📝');
+            setColor(parsed.color || '#D4A72C');
+            setInitialItems(Array.isArray(parsed.initialItems) ? parsed.initialItems : ['', '']);
+            setHasDraft(true);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('Could not restore checklist draft:', e);
+      }
+
       setTitle('');
       setDescription('');
       setFolderId(defaultFolderId || '');
       setIcon('📝');
       setColor('#D4A72C');
       setInitialItems(['', '']);
+      setHasDraft(false);
     }
   }, [checklist, defaultFolderId, isOpen]);
+
+  // Auto-save draft on typing
+  useEffect(() => {
+    if (!isOpen || checklist) return;
+
+    const hasAnyContent =
+      title.trim() ||
+      description.trim() ||
+      initialItems.some((i) => typeof i === 'string' && i.trim().length > 0);
+
+    if (hasAnyContent) {
+      try {
+        localStorage.setItem(
+          DRAFT_KEY,
+          JSON.stringify({
+            title,
+            description,
+            folderId,
+            icon,
+            color,
+            initialItems,
+            savedAt: Date.now(),
+          })
+        );
+        setHasDraft(true);
+      } catch (e) {
+        console.warn('Draft save notice:', e);
+      }
+    } else {
+      localStorage.removeItem(DRAFT_KEY);
+      setHasDraft(false);
+    }
+  }, [isOpen, checklist, title, description, folderId, icon, color, initialItems]);
+
+  const handleDiscardDraft = () => {
+    localStorage.removeItem(DRAFT_KEY);
+    setTitle('');
+    setDescription('');
+    setFolderId(defaultFolderId || '');
+    setIcon('📝');
+    setColor('#D4A72C');
+    setInitialItems(['', '']);
+    setHasDraft(false);
+  };
 
   const handleAddItemField = () => {
     setInitialItems((prev) => [...prev, '']);
@@ -55,6 +140,39 @@ export function ChecklistModal({
 
   const handleRemoveItemField = (index) => {
     setInitialItems((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // AI Task Generator Handler
+  const handleAIBreakdown = async (customTitle) => {
+    const targetTitle = (customTitle || title).trim();
+    if (!targetTitle) {
+      showToast('Please enter a checklist goal or title first', 'info');
+      return;
+    }
+
+    setGeneratingAI(true);
+    try {
+      const selectedFolder = folders.find((f) => f.id === folderId);
+      const result = await aiService.generateChecklistBreakdown({
+        title: targetTitle,
+        description,
+        folderName: selectedFolder?.name || '',
+      });
+
+      if (result?.tasks && result.tasks.length > 0) {
+        setInitialItems(result.tasks);
+        if (result.suggestedIcon) setIcon(result.suggestedIcon);
+        if (result.suggestedDescription && !description.trim()) {
+          setDescription(result.suggestedDescription);
+        }
+        showToast(` AI generated ${result.tasks.length} action items!`, 'success');
+      }
+    } catch (err) {
+      console.error('AI breakdown error:', err);
+      showToast('Failed to generate AI breakdown: ' + (err.message || 'Unknown error'), 'error');
+    } finally {
+      setGeneratingAI(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -75,6 +193,8 @@ export function ChecklistModal({
         color,
         initialItems: checklist ? undefined : validInitialItems,
       });
+      localStorage.removeItem(DRAFT_KEY);
+      setHasDraft(false);
       onClose();
     } catch (err) {
       console.error('Save checklist error:', err);
@@ -92,21 +212,134 @@ export function ChecklistModal({
       maxWidth="560px"
     >
       <form onSubmit={handleSubmit}>
-        {/* Title */}
+        {/* In-progress Draft Banner */}
+        {hasDraft && !checklist && (
+          <div
+            style={{
+              padding: '0.35rem 0.65rem',
+              borderRadius: 'var(--radius-md)',
+              backgroundColor: 'var(--bg-subtle)',
+              border: '1px solid var(--border-color)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '0.75rem',
+              fontSize: '0.76rem',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            <span>💾 In-progress draft restored</span>
+            <button
+              type="button"
+              onClick={handleDiscardDraft}
+              style={{
+                color: '#EF4444',
+                fontSize: '0.74rem',
+                fontWeight: 600,
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '0 0.25rem',
+              }}
+            >
+              Discard
+            </button>
+          </div>
+        )}
+
+        {/* Title & AI Breakdown Trigger */}
         <div className="form-field-group">
-          <label className="form-label" htmlFor="checklist-title">
-            Checklist Title *
-          </label>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+            <label className="form-label" htmlFor="checklist-title" style={{ marginBottom: 0 }}>
+              Checklist Title / Goal *
+            </label>
+
+            {!checklist && (
+              <button
+                type="button"
+                onClick={() => handleAIBreakdown()}
+                disabled={generatingAI || !title.trim()}
+                style={{
+                  fontSize: '0.78rem',
+                  color: title.trim() ? 'var(--color-mustard)' : 'var(--text-muted)',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  cursor: title.trim() ? 'pointer' : 'not-allowed',
+                  backgroundColor: 'rgba(212, 167, 44, 0.1)',
+                  border: '1px solid rgba(212, 167, 44, 0.25)',
+                  padding: '0.2rem 0.55rem',
+                  borderRadius: 'var(--radius-full)',
+                  transition: 'all var(--transition-fast)',
+                }}
+                title="Generate step-by-step tasks with InsForge AI"
+              >
+                {generatingAI ? (
+                  <>
+                    <Loader2 size={12} className="animate-spin" />
+                    <span>Generating tasks...</span>
+                  </>
+                ) : (
+                  <>
+
+                    <span>AI Breakdown</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+
           <input
             id="checklist-title"
             type="text"
             className="form-input-control"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Product Launch Tasks, Grocery List, Weekend Goals..."
+            placeholder="e.g. Launch MVP on ProductHunt, Sprint Review, Weekend Trip..."
             required
             autoFocus
           />
+
+          {/* Quick AI Inspiration Pills (When title is empty and creating new checklist) */}
+          {!checklist && !title && (
+            <div style={{ marginTop: '0.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.35rem', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>Try with AI:</span>
+              {QUICK_AI_PROMPTS.map((prompt) => {
+                const cleanName = prompt.replace(/^[\p{Emoji}\s]+/u, '');
+                return (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => {
+                      setTitle(cleanName);
+                      handleAIBreakdown(cleanName);
+                    }}
+                    style={{
+                      fontSize: '0.72rem',
+                      padding: '0.15rem 0.45rem',
+                      borderRadius: 'var(--radius-full)',
+                      backgroundColor: 'var(--bg-subtle)',
+                      border: '1px solid var(--border-color)',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      transition: 'all var(--transition-fast)',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--color-mustard)';
+                      e.currentTarget.style.color = 'var(--color-mustard)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--border-color)';
+                      e.currentTarget.style.color = 'var(--text-secondary)';
+                    }}
+                  >
+                    {prompt}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Folder Select */}
