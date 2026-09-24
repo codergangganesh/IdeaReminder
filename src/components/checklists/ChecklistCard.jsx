@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { useVoiceRecognition } from '../../hooks/useVoiceRecognition';
+import { VoiceRecorder } from '../voice/VoiceRecorder';
+import { parseSpokenItems } from '../../utils/voiceListParser';
 import {
   Check,
   Plus,
@@ -11,6 +14,25 @@ import {
   Edit2,
   Layers,
 } from 'lucide-react';
+
+const parseSubitem = (content) => {
+  if (!content || typeof content !== 'string') return null;
+  if (!content.startsWith('↳')) return null;
+
+  const match = content.match(/^↳\s*([a-zA-Z0-9_-]+):::(.*)$/);
+  if (match) {
+    return {
+      isSubitem: true,
+      parentId: match[1],
+      text: match[2].trim(),
+    };
+  }
+  return {
+    isSubitem: true,
+    parentId: null,
+    text: content.replace(/^↳\s*/, '').trim(),
+  };
+};
 
 export function ChecklistCard({
   checklist,
@@ -28,6 +50,17 @@ export function ChecklistCard({
   const [adding, setAdding] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // Card quick voice
+  const {
+    isListening,
+    formattedDuration,
+    isSupported,
+    error: voiceError,
+    startListening,
+    stopListening,
+    resetTranscript,
+  } = useVoiceRecognition();
+
   const folder = folders.find((f) => f.id === checklist.folder_id);
   const items = checklist.items || [];
   const totalItems = items.length;
@@ -35,14 +68,100 @@ export function ChecklistCard({
   const pct = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
   const isAllComplete = totalItems > 0 && completedItems === totalItems;
 
+  // Build hierarchical tree of parent items with their subitems
+  const topLevelItems = [];
+  const subitemsByParent = {};
+  const unassignedSubitems = [];
+
+  for (const item of items) {
+    const parsed = parseSubitem(item.content);
+    if (parsed) {
+      if (parsed.parentId) {
+        if (!subitemsByParent[parsed.parentId]) {
+          subitemsByParent[parsed.parentId] = [];
+        }
+        subitemsByParent[parsed.parentId].push({ ...item, displayText: parsed.text });
+      } else {
+        if (topLevelItems.length > 0) {
+          const lastParentId = topLevelItems[topLevelItems.length - 1].id;
+          if (!subitemsByParent[lastParentId]) {
+            subitemsByParent[lastParentId] = [];
+          }
+          subitemsByParent[lastParentId].push({ ...item, displayText: parsed.text });
+        } else {
+          unassignedSubitems.push({ ...item, displayText: parsed.text });
+        }
+      }
+    } else {
+      topLevelItems.push(item);
+    }
+  }
+
+  const handleDeleteItemWithChildren = async (e, item) => {
+    e.stopPropagation();
+    const parsed = parseSubitem(item.content);
+    if (!parsed) {
+      const childSubs = subitemsByParent[item.id] || [];
+      await onDeleteItem?.(checklist.id, item.id);
+      for (const sub of childSubs) {
+        try {
+          await onDeleteItem?.(checklist.id, sub.id);
+        } catch (err) {}
+      }
+    } else {
+      await onDeleteItem?.(checklist.id, item.id);
+    }
+  };
+
+  const handleStartCardVoice = () => {
+    startListening(newItemText, (liveText) => {
+      setNewItemText(liveText);
+    });
+  };
+
+  const handleStopCardVoice = () => {
+    stopListening((finalSpeech) => {
+      const text = (finalSpeech || newItemText).trim();
+      if (!text) return;
+      const parsed = parseSpokenItems(text);
+      if (parsed.length > 1) {
+        (async () => {
+          setAdding(true);
+          try {
+            for (const itemText of parsed) {
+              await onAddItem(checklist.id, itemText);
+            }
+            setNewItemText('');
+            resetTranscript();
+          } catch (err) {
+            console.error('Failed to add voice tasks:', err);
+          } finally {
+            setAdding(false);
+          }
+        })();
+      } else if (parsed.length === 1) {
+        setNewItemText(parsed[0]);
+      }
+    });
+  };
+
   const handleAddItemSubmit = async (e) => {
     e?.preventDefault();
-    if (!newItemText.trim() || adding) return;
+    const text = newItemText.trim();
+    if (!text || adding) return;
+
+    if (isListening) {
+      stopListening();
+    }
 
     setAdding(true);
     try {
-      await onAddItem(checklist.id, newItemText.trim());
+      const parsed = parseSpokenItems(text);
+      for (const itemText of parsed) {
+        await onAddItem(checklist.id, itemText);
+      }
       setNewItemText('');
+      resetTranscript();
     } catch (err) {
       console.error('Failed to add task:', err);
     } finally {
@@ -298,58 +417,165 @@ export function ChecklistCard({
             No tasks yet. Add your first item below!
           </div>
         ) : (
-          items.map((item) => (
-            <div
-              key={item.id}
-              className={`checklist-item-row ${item.is_completed ? 'is-completed' : ''}`}
-              onClick={() => onToggleItem?.(checklist.id, item.id)}
-            >
-              {/* Checkbox button */}
-              <button
-                type="button"
-                className={`task-checkbox-box ${item.is_completed ? 'is-checked' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleItem?.(checklist.id, item.id);
-                }}
-                aria-label={item.is_completed ? 'Mark incomplete' : 'Mark complete'}
-              >
-                {item.is_completed ? <Check size={12} strokeWidth={3} /> : null}
-              </button>
+          <>
+            {topLevelItems.map((parentItem) => {
+              const childSubs = subitemsByParent[parentItem.id] || [];
 
-              {/* Task Content text */}
-              <span className="task-content-text" title={item.content}>
-                {item.content}
-              </span>
+              return (
+                <React.Fragment key={parentItem.id}>
+                  {/* Parent Item Row */}
+                  <div
+                    className={`checklist-item-row ${parentItem.is_completed ? 'is-completed' : ''}`}
+                    onClick={() => onToggleItem?.(checklist.id, parentItem.id)}
+                  >
+                    <button
+                      type="button"
+                      className={`task-checkbox-box ${parentItem.is_completed ? 'is-checked' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleItem?.(checklist.id, parentItem.id);
+                      }}
+                      aria-label={parentItem.is_completed ? 'Mark incomplete' : 'Mark complete'}
+                    >
+                      {parentItem.is_completed ? <Check size={12} strokeWidth={3} /> : null}
+                    </button>
 
-              {/* Remove button (appears on hover) */}
-              <button
-                type="button"
-                className="task-delete-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteItem?.(checklist.id, item.id);
-                }}
-                title="Delete task"
+                    <span
+                      className="task-content-text"
+                      title={parentItem.content}
+                      style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    >
+                      {parentItem.content}
+                    </span>
+
+                    <button
+                      type="button"
+                      className="task-delete-btn"
+                      onClick={(e) => handleDeleteItemWithChildren(e, parentItem)}
+                      title="Delete task and its subitems"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+
+                  {/* Subitems nested directly under this parent */}
+                  {childSubs.map((subitem) => (
+                    <div
+                      key={subitem.id}
+                      className={`checklist-item-row is-subitem ${subitem.is_completed ? 'is-completed' : ''}`}
+                      onClick={() => onToggleItem?.(checklist.id, subitem.id)}
+                    >
+                      <button
+                        type="button"
+                        className={`task-checkbox-box subitem-checkbox ${subitem.is_completed ? 'is-checked' : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleItem?.(checklist.id, subitem.id);
+                        }}
+                        aria-label={subitem.is_completed ? 'Mark incomplete' : 'Mark complete'}
+                      >
+                        {subitem.is_completed ? <Check size={10} strokeWidth={3} /> : null}
+                      </button>
+
+                      <span
+                        className="task-content-text"
+                        title={subitem.displayText}
+                        style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}
+                      >
+                        <span className="subitem-branch-icon">↳</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {subitem.displayText}
+                        </span>
+                      </span>
+
+                      <button
+                        type="button"
+                        className="task-delete-btn"
+                        onClick={(e) => handleDeleteItemWithChildren(e, subitem)}
+                        title="Delete subitem"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </React.Fragment>
+              );
+            })}
+
+            {/* Any unassigned legacy subitems */}
+            {unassignedSubitems.map((subitem) => (
+              <div
+                key={subitem.id}
+                className={`checklist-item-row is-subitem ${subitem.is_completed ? 'is-completed' : ''}`}
+                onClick={() => onToggleItem?.(checklist.id, subitem.id)}
               >
-                <Trash2 size={12} />
-              </button>
-            </div>
-          ))
+                <button
+                  type="button"
+                  className={`task-checkbox-box subitem-checkbox ${subitem.is_completed ? 'is-checked' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleItem?.(checklist.id, subitem.id);
+                  }}
+                  aria-label={subitem.is_completed ? 'Mark incomplete' : 'Mark complete'}
+                >
+                  {subitem.is_completed ? <Check size={10} strokeWidth={3} /> : null}
+                </button>
+
+                <span
+                  className="task-content-text"
+                  title={subitem.displayText}
+                  style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}
+                >
+                  <span className="subitem-branch-icon">↳</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {subitem.displayText}
+                  </span>
+                </span>
+
+                <button
+                  type="button"
+                  className="task-delete-btn"
+                  onClick={(e) => handleDeleteItemWithChildren(e, subitem)}
+                  title="Delete subitem"
+                >
+                  <Trash2 size={11} />
+                </button>
+              </div>
+            ))}
+          </>
         )}
       </div>
 
-      {/* Add New Task Inline Input */}
+      {/* Add New Task Inline Input + Voice */}
       <form onSubmit={handleAddItemSubmit} style={{ marginTop: 'auto' }}>
-        <div className="task-quick-add-wrap">
+        <div
+          className="task-quick-add-wrap"
+          style={{
+            borderColor: isListening ? 'var(--color-mustard)' : undefined,
+          }}
+        >
           <input
             type="text"
             className="task-quick-input"
             value={newItemText}
             onChange={(e) => setNewItemText(e.target.value)}
-            placeholder="+ Add a task (press Enter)..."
+            placeholder={isListening ? 'Listening... (say list of items)' : '+ Add task (or speak list)...'}
             disabled={adding}
+            style={{ minWidth: 0 }}
           />
+
+          <VoiceRecorder
+            isListening={isListening}
+            formattedDuration={formattedDuration}
+            isSupported={isSupported}
+            error={voiceError}
+            onStart={handleStartCardVoice}
+            onStop={handleStopCardVoice}
+            compact={true}
+            iconOnly={true}
+            title="Speak tasks (e.g. 'apples, bananas, oranges, milk')"
+          />
+
           <button
             type="submit"
             className="task-quick-submit-btn"

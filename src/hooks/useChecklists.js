@@ -6,7 +6,7 @@ import { useToast } from '../context/ToastContext';
 import confetti from 'canvas-confetti';
 
 export function useChecklists() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, refreshAuth } = useAuth();
   const { showToast } = useToast();
 
   const [folders, setFolders] = useState([]);
@@ -40,7 +40,12 @@ export function useChecklists() {
         err?.message?.includes('Invalid token') ||
         err?.message?.includes('expired')
       ) {
-        signOut?.();
+        const refreshed = await refreshAuth?.();
+        if (refreshed) {
+          fetchData(true);
+          return;
+        }
+        console.warn('Authentication token needs renewal for checklists fetch');
       } else {
         console.error('Failed to fetch checklists/folders:', err);
         setError(err.message);
@@ -48,7 +53,7 @@ export function useChecklists() {
     } finally {
       if (!isBackground) setLoading(false);
     }
-  }, [user, signOut]);
+  }, [user, refreshAuth]);
 
   useEffect(() => {
     fetchData();
@@ -134,10 +139,22 @@ export function useChecklists() {
 
   const editChecklist = async (checklistId, updates) => {
     try {
-      const updated = await checklistService.updateChecklist(checklistId, updates);
-      setChecklists((prev) =>
-        prev.map((cl) => (cl.id === checklistId ? { ...cl, ...updated } : cl))
-      );
+      const updated = await checklistService.updateChecklist(checklistId, updates, user?.id);
+
+      // If new items were added during edit, refresh the full checklist so items stay synchronized
+      if (Array.isArray(updates.newItems) && updates.newItems.length > 0) {
+        const full = await checklistService.getChecklistById(checklistId);
+        if (full) {
+          setChecklists((prev) =>
+            prev.map((cl) => (cl.id === checklistId ? full : cl))
+          );
+        }
+      } else if (updated) {
+        setChecklists((prev) =>
+          prev.map((cl) => (cl.id === checklistId ? { ...cl, ...updated } : cl))
+        );
+      }
+
       showToast('✓ Checklist updated', 'success');
       realtimeService.broadcast('checklists:changed');
       return updated;

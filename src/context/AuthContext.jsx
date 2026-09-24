@@ -123,6 +123,80 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => initialSession?.user || null);
   const [loading, setLoading] = useState(() => !initialSession);
 
+  const refreshAuth = useCallback(async () => {
+    const saved = getLocalSession();
+    const tokenToRefresh = saved?.refreshToken || insforge.tokenManager?.getSession?.()?.refreshToken;
+
+    try {
+      const { data, error } = await insforge.auth.refreshSession(
+        tokenToRefresh ? { refreshToken: tokenToRefresh } : undefined
+      );
+
+      if (!error && data?.accessToken) {
+        insforge.setAccessToken(data.accessToken);
+        try {
+          insforge.tokenManager.saveSession({
+            accessToken: data.accessToken,
+            refreshToken: data.refreshToken || tokenToRefresh,
+            user: data.user || saved?.user,
+          });
+        } catch (e) {}
+
+        const finalUser = data.user || saved?.user;
+        if (finalUser) {
+          saveLocalSession({
+            accessToken: data.accessToken,
+            refreshToken: data.refreshToken || tokenToRefresh,
+            user: finalUser,
+          });
+          setUser(finalUser);
+        }
+        return true;
+      } else if (
+        error &&
+        (error.message?.includes('invalid_grant') ||
+          error.message?.includes('revoked') ||
+          error.message?.includes('Refresh token expired') ||
+          error.status === 400 ||
+          error.statusCode === 400)
+      ) {
+        console.warn('Session refresh token permanently invalid, logging out:', error.message);
+        clearLocalSession();
+        insforge.setAccessToken(null);
+        insforge.tokenManager?.clearSession?.();
+        setUser(null);
+        return false;
+      }
+    } catch (err) {
+      console.warn('Network issue during refreshAuth, retaining local session:', err);
+    }
+    return false;
+  }, []);
+
+  // Listen to SDK auth state changes for automatic token updates
+  useEffect(() => {
+    let unsubscribe;
+    try {
+      unsubscribe = insforge.auth?.onAuthStateChange?.((event, session) => {
+        if (session?.user) {
+          setUser(session.user);
+          if (session.accessToken) {
+            saveLocalSession(session);
+          }
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+          clearLocalSession();
+        }
+      });
+    } catch (e) {
+      console.warn('Could not bind onAuthStateChange:', e);
+    }
+
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, []);
+
   // Restore & verify session on app load
   useEffect(() => {
     let cancelled = false;
@@ -135,6 +209,7 @@ export function AuthProvider({ children }) {
         try {
           insforge.tokenManager.saveSession({
             accessToken: saved.accessToken,
+            refreshToken: saved.refreshToken,
             user: saved.user,
           });
           insforge.setAccessToken(saved.accessToken);
@@ -216,31 +291,19 @@ export function AuthProvider({ children }) {
               error.message?.includes('unauthorized') ||
               error.message?.includes('JWT'))
           ) {
-            // Token is explicitly expired or invalid on server
-            console.warn('Session expired or unauthorized, clearing session');
-            clearLocalSession();
-            insforge.setAccessToken(null);
-            insforge.tokenManager?.clearSession?.();
-            setUser(null);
+            // Token expired; automatically perform session refresh using refresh token!
+            console.log('Access token expired, performing seamless refresh...');
+            const refreshed = await refreshAuth();
+            if (!refreshed && !saved.user) {
+              clearLocalSession();
+              insforge.setAccessToken(null);
+              insforge.tokenManager?.clearSession?.();
+              setUser(null);
+            }
           }
         } catch (err) {
-          if (
-            err?.status === 401 ||
-            err?.statusCode === 401 ||
-            err?.code === 'UNAUTHORIZED' ||
-            err?.error === 'AUTH_UNAUTHORIZED' ||
-            err?.message?.includes('Invalid token') ||
-            err?.message?.includes('expired') ||
-            err?.message?.includes('unauthorized')
-          ) {
-            clearLocalSession();
-            insforge.setAccessToken(null);
-            insforge.tokenManager?.clearSession?.();
-            setUser(null);
-          } else {
-            // Network errors should not log the user out
-            console.warn('Auth verification check warning:', err);
-          }
+          // Network errors or momentary connectivity issues should never log the user out
+          console.warn('Auth verification check warning:', err);
         }
       } else {
         // No local session, attempt normal hydration (e.g. cold load or OAuth callback)
@@ -508,6 +571,7 @@ export function AuthProvider({ children }) {
         signIn,
         signUp,
         signOut,
+        refreshAuth,
         signInWithOAuth,
         updateProfileName,
         updateProfileAvatar,

@@ -407,6 +407,8 @@ export function Checklists() {
         folders={folders}
         defaultFolderId={selectedFolderId !== 'all' && selectedFolderId !== 'unfiled' ? selectedFolderId : null}
         onSave={handleSaveChecklist}
+        onAddItem={onAddItem}
+        onDeleteItem={onDeleteItem}
         onOpenCreateFolder={() => {
           setChecklistModalOpen(false);
           handleOpenCreateFolder();

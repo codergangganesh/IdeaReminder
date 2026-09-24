@@ -5,14 +5,17 @@ const anonKey = import.meta.env.VITE_INSFORGE_ANON_KEY || 'anon_a245ba549191ea81
 
 // Read any saved session from localStorage to prevent auth loss on refresh
 let initialToken = undefined;
+let initialRefreshToken = undefined;
 let initialUser = null;
+
 if (typeof window !== 'undefined') {
   try {
     const raw = localStorage.getItem('ideavault_auth_session');
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed?.accessToken) {
+      if (parsed?.accessToken || parsed?.refreshToken || parsed?.user) {
         initialToken = parsed.accessToken;
+        initialRefreshToken = parsed.refreshToken;
         initialUser = parsed.user || null;
       }
     }
@@ -28,10 +31,11 @@ export const insforge = createClient({
 });
 
 // Prime tokenManager with saved session immediately if present
-if (initialToken && initialUser) {
+if (initialToken || initialRefreshToken || initialUser) {
   try {
     insforge.tokenManager.saveSession({
       accessToken: initialToken,
+      refreshToken: initialRefreshToken,
       user: initialUser,
     });
   } catch (err) {

@@ -6,7 +6,7 @@ import { useToast } from '../context/ToastContext';
 import confetti from 'canvas-confetti';
 
 export function useIdeas() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, refreshAuth } = useAuth();
   const { showToast } = useToast();
   const [ideas, setIdeas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -31,7 +31,12 @@ export function useIdeas() {
         err?.message?.includes('Invalid token') ||
         err?.message?.includes('expired')
       ) {
-        signOut?.();
+        const refreshed = await refreshAuth?.();
+        if (refreshed) {
+          fetchIdeas(true);
+          return;
+        }
+        console.warn('Authentication token needs renewal for ideas fetch');
       } else {
         console.error('Failed to fetch ideas:', err);
         setError(err.message);
@@ -39,7 +44,7 @@ export function useIdeas() {
     } finally {
       if (!isBackground) setLoading(false);
     }
-  }, [user, signOut]);
+  }, [user, refreshAuth]);
 
   useEffect(() => {
     fetchIdeas();

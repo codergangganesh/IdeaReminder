@@ -542,6 +542,8 @@ export function Dashboard() {
         checklist={selectedChecklist}
         folders={folders}
         onSave={handleSaveChecklist}
+        onAddItem={onAddItem}
+        onDeleteItem={onDeleteItem}
         onOpenCreateFolder={() => {
           setChecklistModalOpen(false);
           setFolderModalOpen(true);

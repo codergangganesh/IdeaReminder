@@ -37,7 +37,11 @@ export function QuickCaptureModal({
     startListening,
     stopListening,
     resetTranscript,
-  } = useVoiceRecognition();
+  } = useVoiceRecognition({
+    onTranscript: (liveText) => {
+      setContent(liveText);
+    },
+  });
 
   // Restore draft or reset modal state when opening
   useEffect(() => {
@@ -194,6 +198,7 @@ export function QuickCaptureModal({
       // Clear draft on successful save
       localStorage.removeItem(DRAFT_KEY);
       setHasDraft(false);
+      resetTranscript();
       onClose();
     } catch (err) {
       console.error('Quick capture error:', err);
@@ -261,6 +266,8 @@ export function QuickCaptureModal({
               alignItems: 'center',
               justifyContent: 'space-between',
               marginBottom: '0.4rem',
+              flexWrap: 'wrap',
+              gap: '0.4rem',
             }}
           >
             <label className="form-label" htmlFor="quick-capture-content" style={{ marginBottom: 0 }}>
@@ -275,7 +282,7 @@ export function QuickCaptureModal({
               error={voiceError}
               onStart={() => {
                 setVoiceMode(true);
-                startListening(content);
+                startListening(content, (t) => setContent(t));
               }}
               onStop={stopListening}
               onReset={resetTranscript}

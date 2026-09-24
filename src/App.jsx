@@ -58,7 +58,29 @@ function PublicRoute({ children }) {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return null;
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '1rem',
+          backgroundColor: 'var(--bg-app)',
+        }}
+      >
+        <img
+          src={logoImg}
+          alt="IdeaVault Logo"
+          style={{ width: '56px', height: '56px', borderRadius: '14px', boxShadow: 'var(--shadow-mustard)' }}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-mustard)', fontWeight: 600 }}>
+          <Loader2 className="btn-spinner" size={20} />
+          <span>Opening your IdeaVault...</span>
+        </div>
+      </div>
+    );
   }
 
   if (user) {

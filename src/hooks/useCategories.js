@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
 export function useCategories() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, refreshAuth } = useAuth();
   const { showToast } = useToast();
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -35,7 +35,12 @@ export function useCategories() {
         err?.message?.includes('Invalid token') ||
         err?.message?.includes('expired')
       ) {
-        signOut?.();
+        const refreshed = await refreshAuth?.();
+        if (refreshed) {
+          fetchCategories();
+          return;
+        }
+        console.warn('Authentication token needs renewal for categories fetch');
       } else {
         console.error('Failed to fetch categories:', err);
         setError(err.message);
@@ -43,7 +48,7 @@ export function useCategories() {
     } finally {
       setLoading(false);
     }
-  }, [user, signOut]);
+  }, [user, refreshAuth]);
 
   useEffect(() => {
     fetchCategories();

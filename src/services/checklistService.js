@@ -195,7 +195,7 @@ export const checklistService = {
     };
   },
 
-  async updateChecklist(checklistId, updates) {
+  async updateChecklist(checklistId, updates, userId = null) {
     const payload = {};
     if (updates.title !== undefined) payload.title = updates.title.trim();
     if (updates.description !== undefined) payload.description = updates.description;
@@ -205,14 +205,41 @@ export const checklistService = {
     if (updates.is_pinned !== undefined) payload.is_pinned = updates.is_pinned;
     if (updates.position !== undefined) payload.position = updates.position;
 
-    const { data, error } = await insforge.database
-      .from('checklists')
-      .update(payload)
-      .eq('id', checklistId)
-      .select();
+    let updatedChecklist = null;
+    if (Object.keys(payload).length > 0) {
+      const { data, error } = await insforge.database
+        .from('checklists')
+        .update(payload)
+        .eq('id', checklistId)
+        .select();
 
-    if (error) throw error;
-    return data?.[0];
+      if (error) throw error;
+      updatedChecklist = data?.[0];
+    }
+
+    // If new items were provided during edit, insert them
+    if (Array.isArray(updates.newItems) && updates.newItems.length > 0) {
+      const validItems = updates.newItems
+        .filter((t) => typeof t === 'string' && t.trim().length > 0)
+        .map((text, idx) => ({
+          checklist_id: checklistId,
+          user_id: userId,
+          content: text.trim(),
+          is_completed: false,
+          position: (updates.currentPositionOffset || 0) + idx,
+        }));
+
+      if (validItems.length > 0) {
+        const { error: itemErr } = await insforge.database
+          .from('checklist_items')
+          .insert(validItems);
+        if (itemErr) {
+          console.warn('Could not insert new items during updateChecklist:', itemErr.message);
+        }
+      }
+    }
+
+    return updatedChecklist;
   },
 
   async deleteChecklist(checklistId) {
